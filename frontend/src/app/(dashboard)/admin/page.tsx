@@ -2,11 +2,25 @@
 
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { OvertimeWidget } from '@/components/schedule/overtime-widget';
+import { useLocations } from '@/hooks/api/use-locations';
 import { Users, MapPin, Calendar, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 
+function getMonday(): string {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
 export default function AdminDashboard() {
   const { data: session } = useSession();
+  const { data: locations } = useLocations();
+  const firstLocationId = locations?.[0]?.id ?? '';
+  const weekStart = getMonday();
 
   return (
     <DashboardLayout>
@@ -75,22 +89,13 @@ export default function AdminDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">
-              Recent Activity
-            </h3>
-            <div className="text-sm text-slate-500 text-center py-8">
-              No recent activity
-            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Recent Activity</h3>
+            <div className="text-sm text-slate-500 text-center py-8">No recent activity</div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">
-              Upcoming Shifts
-            </h3>
-            <div className="text-sm text-slate-500 text-center py-8">
-              No upcoming shifts
-            </div>
-          </div>
+          {firstLocationId && (
+            <OvertimeWidget locationId={firstLocationId} weekStart={weekStart} />
+          )}
         </div>
       </div>
     </DashboardLayout>

@@ -25,8 +25,8 @@ interface NavItem {
 const ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { label: 'Users', href: '/admin/users', icon: Users },
+  { label: 'Schedule', href: '/admin/schedule', icon: Calendar },
   { label: 'Locations', href: '/admin/locations', icon: MapPin },
-  { label: 'Schedules', href: '/admin/schedules', icon: Calendar },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { label: 'Settings', href: '/admin/settings', icon: Settings },
 ];
@@ -34,7 +34,7 @@ const ADMIN_NAV: NavItem[] = [
 const MANAGER_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/manager', icon: LayoutDashboard },
   { label: 'Staff', href: '/manager/staff', icon: Users },
-  { label: 'Schedules', href: '/manager/schedules', icon: Calendar },
+  { label: 'Schedule', href: '/manager/schedule', icon: Calendar },
   { label: 'Requests', href: '/manager/requests', icon: Clock },
 ];
 
