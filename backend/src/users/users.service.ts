@@ -180,7 +180,7 @@ export class UsersService {
       throw new ForbiddenException('Only admins can change user roles');
     }
 
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id },
       data: dto,
       select: {
@@ -196,6 +196,17 @@ export class UsersService {
         notificationPreference: true,
       },
     });
+
+    await this.writeAuditLog(
+      currentUserId,
+      'UPDATE',
+      'User',
+      id,
+      user,
+      updated,
+    );
+
+    return updated;
   }
 
   async softDelete(id: string) {
@@ -214,10 +225,14 @@ export class UsersService {
       }
     }
 
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id },
       data: { isActive: false },
     });
+
+    await this.writeAuditLog(id, 'DEACTIVATE', 'User', id, user, updated);
+
+    return updated;
   }
 
   async getUserSkills(userId: string) {
@@ -641,5 +656,25 @@ export class UsersService {
       message,
       { userId },
     );
+  }
+
+  private async writeAuditLog(
+    actorId: string,
+    action: string,
+    entityType: string,
+    entityId: string,
+    before: unknown,
+    after: unknown,
+  ) {
+    await this.prisma.auditLog.create({
+      data: {
+        entityType,
+        entityId,
+        action,
+        userId: actorId,
+        beforeState: (before as Prisma.InputJsonValue) ?? undefined,
+        afterState: (after as Prisma.InputJsonValue) ?? undefined,
+      },
+    });
   }
 }

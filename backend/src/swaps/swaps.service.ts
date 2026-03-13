@@ -268,6 +268,15 @@ export class SwapsService {
         },
         include: SWAP_INCLUDE,
       });
+      await this.writeAuditLog(
+        actor.sub,
+        'REJECT_SWAP',
+        'SwapRequest',
+        swapId,
+        swap.shiftId,
+        swap,
+        updated,
+      );
       await this.notifications.notifyMany(
         [swap.initiatorId, swap.targetId],
         'SWAP_MANAGER_REJECTED',
@@ -321,6 +330,15 @@ export class SwapsService {
       });
     });
 
+    await this.writeAuditLog(
+      actor.sub,
+      'APPROVE_SWAP',
+      'SwapRequest',
+      swapId,
+      swap.shiftId,
+      swap,
+      updated,
+    );
     await this.notifications.notifyMany(
       [swap.initiatorId, swap.targetId],
       'SWAP_APPROVED',
@@ -443,6 +461,28 @@ export class SwapsService {
     });
     if (!swap) throw new NotFoundException('Swap request not found.');
     return swap;
+  }
+
+  private async writeAuditLog(
+    actorId: string,
+    action: string,
+    entityType: string,
+    entityId: string,
+    shiftId: string,
+    before: unknown,
+    after: unknown,
+  ) {
+    await this.prisma.auditLog.create({
+      data: {
+        entityType,
+        entityId,
+        action,
+        userId: actorId,
+        shiftId,
+        beforeState: (before as Prisma.InputJsonValue) ?? undefined,
+        afterState: (after as Prisma.InputJsonValue) ?? undefined,
+      },
+    });
   }
 
   private async assertUnderPendingLimit(userId: string) {

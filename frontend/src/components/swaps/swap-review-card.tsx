@@ -30,8 +30,9 @@ export function SwapReviewCard({ swap }: Props) {
     try {
       await review.mutateAsync({ id: swap.id, approve, notes: notes || undefined });
       toast.success(approve ? 'Swap approved — assignments updated.' : 'Swap request rejected.');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Action failed.');
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg ?? 'Action failed.');
     }
   };
 

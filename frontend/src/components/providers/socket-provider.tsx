@@ -1,14 +1,9 @@
 'use client';
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { io, Socket } from 'socket.io-client';
+import type { Session } from 'next-auth';
 
 const SocketContext = createContext<Socket | null>(null);
 
@@ -16,33 +11,30 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
-  const socketRef = useRef<Socket | null>(null);
-  const [, setConnected] = useState(false);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const token = (session as Session & { accessToken?: string })?.accessToken;
 
   useEffect(() => {
-    const token = (session as any)?.accessToken as string | undefined;
     if (!token) return;
 
-    const socket = io(`${API_URL}/events`, {
+    const newSocket = io(`${API_URL}/events`, {
       auth: { token },
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 2000,
     });
 
-    socketRef.current = socket;
-
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
+    newSocket.on('connect', () => setSocket(newSocket));
+    newSocket.on('disconnect', () => setSocket(null));
 
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      newSocket.disconnect();
+      setSocket(null);
     };
-  }, [(session as any)?.accessToken]);
+  }, [token]);
 
   return (
-    <SocketContext.Provider value={socketRef.current}>
+    <SocketContext.Provider value={socket}>
       {children}
     </SocketContext.Provider>
   );

@@ -14,6 +14,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { SwapsModule } from './swaps/swaps.module';
 import { DropsModule } from './drops/drops.module';
 import { EventsModule } from './events/events.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { EventsModule } from './events/events.module';
     NotificationsModule,
     SwapsModule,
     DropsModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [AppService],

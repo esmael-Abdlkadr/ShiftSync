@@ -299,6 +299,15 @@ export class DropsService {
         },
         include: DROP_INCLUDE,
       });
+      await this.writeAuditLog(
+        actor.sub,
+        'REJECT_DROP',
+        'DropRequest',
+        dropId,
+        drop.shiftId,
+        drop,
+        updated,
+      );
       if (drop.claimerId) {
         // Notify claimer: their claim was rejected
         await this.notifications.notify(
@@ -349,6 +358,15 @@ export class DropsService {
       });
     });
 
+    await this.writeAuditLog(
+      actor.sub,
+      'APPROVE_DROP',
+      'DropRequest',
+      dropId,
+      drop.shiftId,
+      drop,
+      updated,
+    );
     await this.notifications.notifyMany(
       [drop.requestorId, drop.claimerId],
       'DROP_APPROVED',
@@ -456,6 +474,28 @@ export class DropsService {
     });
     if (!drop) throw new NotFoundException('Drop request not found.');
     return drop;
+  }
+
+  private async writeAuditLog(
+    actorId: string,
+    action: string,
+    entityType: string,
+    entityId: string,
+    shiftId: string,
+    before: unknown,
+    after: unknown,
+  ) {
+    await this.prisma.auditLog.create({
+      data: {
+        entityType,
+        entityId,
+        action,
+        userId: actorId,
+        shiftId,
+        beforeState: (before as Prisma.InputJsonValue) ?? undefined,
+        afterState: (after as Prisma.InputJsonValue) ?? undefined,
+      },
+    });
   }
 
   private async assertUnderPendingLimit(userId: string) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   useUserAvailability,
   useUserAvailabilityExceptions,
@@ -59,12 +59,24 @@ export function AvailabilityGrid({ userId }: AvailabilityGridProps) {
   const addException = useAddAvailabilityException();
   const removeException = useRemoveAvailabilityException();
 
-  const [localAvailability, setLocalAvailability] = useState<AvailabilityState>(() =>
+  const buildState = (slots: typeof availability): AvailabilityState =>
     DAYS.reduce((acc, day) => {
-      acc[day.value] = { ...DEFAULT_AVAILABILITY };
+      const found = slots?.find((a) => a.dayOfWeek === day.value);
+      acc[day.value] = found
+        ? { enabled: true, startTime: found.startTime, endTime: found.endTime }
+        : { ...DEFAULT_AVAILABILITY };
       return acc;
-    }, {} as AvailabilityState)
-  );
+    }, {} as AvailabilityState);
+
+  const [syncedAvailability, setSyncedAvailability] = useState(availability);
+  const [localAvailability, setLocalAvailability] = useState<AvailabilityState>(() => buildState(availability));
+  const [hasChanges, setHasChanges] = useState(false);
+
+  if (availability !== syncedAvailability) {
+    setSyncedAvailability(availability);
+    setLocalAvailability(buildState(availability));
+    setHasChanges(false);
+  }
 
   const [showExceptionForm, setShowExceptionForm] = useState(false);
   const [exceptionForm, setExceptionForm] = useState<CreateExceptionRequest>({
@@ -74,28 +86,6 @@ export function AvailabilityGrid({ userId }: AvailabilityGridProps) {
     endTime: '17:00',
     reason: '',
   });
-
-  const [hasChanges, setHasChanges] = useState(false);
-
-  useEffect(() => {
-    if (availability) {
-      const newState = DAYS.reduce((acc, day) => {
-        const found = availability.find((a) => a.dayOfWeek === day.value);
-        if (found) {
-          acc[day.value] = {
-            enabled: true,
-            startTime: found.startTime,
-            endTime: found.endTime,
-          };
-        } else {
-          acc[day.value] = { ...DEFAULT_AVAILABILITY };
-        }
-        return acc;
-      }, {} as AvailabilityState);
-      setLocalAvailability(newState);
-      setHasChanges(false);
-    }
-  }, [availability]);
 
   const handleDayToggle = (day: DayOfWeek) => {
     setLocalAvailability((prev) => ({

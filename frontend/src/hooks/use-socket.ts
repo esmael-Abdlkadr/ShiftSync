@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useSocketContext } from '@/components/providers/socket-provider';
 import type { Socket } from 'socket.io-client';
 
@@ -14,7 +14,10 @@ export function useSocketEvent<T = unknown>(
 ): void {
   const socket = useSocketContext();
   const handlerRef = useRef(handler);
-  handlerRef.current = handler;
+
+  useLayoutEffect(() => {
+    handlerRef.current = handler;
+  });
 
   useEffect(() => {
     if (!socket) return;

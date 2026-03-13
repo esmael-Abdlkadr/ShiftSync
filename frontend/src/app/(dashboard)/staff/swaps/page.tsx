@@ -43,8 +43,9 @@ function formatTime(utcStr: string, tz: string): string {
 
 export default function StaffSwapsPage() {
   const { data: session } = useSession();
-  const userId = (session?.user as any)?.id ?? '';
+  const userId = session?.user?.id ?? '';
   const queryClient = useQueryClient();
+  const now = useState(Date.now)[0];
 
   const [tab, setTab] = useState<Tab>('my-shifts');
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
@@ -90,12 +91,14 @@ export default function StaffSwapsPage() {
     setWeekStart(d);
   };
 
+  type ApiErr = { response?: { data?: { message?: string } } };
+
   const handleCancelSwap = async (id: string) => {
     try {
       await cancelSwap.mutateAsync(id);
       toast.success('Swap request cancelled.');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to cancel swap.');
+    } catch (err) {
+      toast.error((err as ApiErr)?.response?.data?.message ?? 'Failed to cancel swap.');
     }
   };
 
@@ -103,8 +106,8 @@ export default function StaffSwapsPage() {
     try {
       await cancelDrop.mutateAsync(id);
       toast.success('Drop request cancelled.');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to cancel drop.');
+    } catch (err) {
+      toast.error((err as ApiErr)?.response?.data?.message ?? 'Failed to cancel drop.');
     }
   };
 
@@ -112,9 +115,9 @@ export default function StaffSwapsPage() {
     try {
       await claimDrop.mutateAsync(id);
       toast.success('Shift claimed — waiting for manager approval.');
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? 'Failed to claim shift.';
-      toast.error(typeof msg === 'string' ? msg : 'Scheduling conflict — cannot claim this shift.');
+    } catch (err) {
+      const msg = (err as ApiErr)?.response?.data?.message;
+      toast.error(msg ?? 'Scheduling conflict — cannot claim this shift.');
     }
   };
 
@@ -413,7 +416,7 @@ export default function StaffSwapsPage() {
                     });
                     const expiresIn = Math.max(
                       0,
-                      Math.round((new Date(drop.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60)),
+                      Math.round((new Date(drop.expiresAt).getTime() - now) / (1000 * 60 * 60)),
                     );
 
                     return (

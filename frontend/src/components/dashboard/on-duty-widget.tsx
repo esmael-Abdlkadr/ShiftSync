@@ -13,6 +13,7 @@ interface OnDutyStaff {
   skill: { id: string; name: string };
   shiftStart: string;
   shiftEnd: string;
+  location?: { id: string; name: string; timezone: string };
 }
 
 interface OnDutyLocation {
@@ -30,11 +31,7 @@ function formatTime(utcStr: string, tz: string) {
 }
 
 export function OnDutyWidget() {
-  const {
-    data,
-    isLoading,
-    refetch,
-  } = useQuery<OnDutyLocation[]>({
+  const { data, isLoading } = useQuery<OnDutyLocation[]>({
     queryKey: ['on-duty'],
     queryFn: () => api.get<OnDutyLocation[]>('/shifts/on-duty').then((r) => r.data),
     refetchInterval: 60_000,
@@ -44,13 +41,10 @@ export function OnDutyWidget() {
 
   useSocketEvent<Record<string, OnDutyStaff[]>>('duty:update', (grouped) => {
     const locations: OnDutyLocation[] = Object.entries(grouped).map(
-      ([, entries]) => {
-        const first = entries[0] as any;
-        return {
-          location: first?.location ?? { id: '', name: 'Unknown', timezone: 'UTC' },
-          staff: entries as OnDutyStaff[],
-        };
-      },
+      ([, entries]) => ({
+        location: entries[0]?.location ?? { id: '', name: 'Unknown', timezone: 'UTC' },
+        staff: entries,
+      }),
     );
     setLiveData(locations);
   });

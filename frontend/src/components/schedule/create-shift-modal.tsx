@@ -70,8 +70,9 @@ export function CreateShiftModal({ isOpen, onClose, defaultLocationId, defaultDa
 
       toast.success('Shift created');
       handleClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to create shift');
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg ?? 'Failed to create shift');
     }
   };
 

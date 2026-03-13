@@ -28,8 +28,9 @@ export function SwapRequestModal({ shift, isOpen, onClose, currentUserId }: Prop
       await createSwap.mutateAsync({ shiftId: shift.id, targetUserId: selectedTargetId });
       toast.success('Swap request sent — waiting for partner to accept.');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to send swap request.');
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg ?? 'Failed to send swap request.');
     }
   };
 

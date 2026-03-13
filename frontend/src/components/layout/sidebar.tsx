@@ -14,6 +14,7 @@ import {
   LogOut,
   CalendarDays,
   BarChart3,
+  ClipboardList,
 } from 'lucide-react';
 import { NotificationBell } from './notification-bell';
 
@@ -29,6 +30,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Schedule', href: '/admin/schedule', icon: Calendar },
   { label: 'Locations', href: '/admin/locations', icon: MapPin },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
+  { label: 'Audit Log', href: '/admin/audit', icon: ClipboardList },
   { label: 'Notifications', href: '/notifications', icon: Bell },
   { label: 'Settings', href: '/settings', icon: Settings },
 ];

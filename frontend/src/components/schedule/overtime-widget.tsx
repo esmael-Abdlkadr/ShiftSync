@@ -32,7 +32,8 @@ function Row({ entry }: { entry: WeeklyHoursEntry }) {
     <div className="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0">
       <div className="w-32 text-sm text-slate-800 font-medium truncate">{entry.name}</div>
       <HoursBar hours={entry.weeklyHours} />
-      <div className="flex items-center gap-1 min-w-[4.5rem] justify-end">
+      <div className="flex items-center gap-1.5 min-w-[5rem] justify-end">
+        <Icon className={`h-3.5 w-3.5 ${cfg.color}`} />
         <span className="text-sm font-semibold text-slate-900">{entry.weeklyHours}h</span>
         <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${cfg.bg} ${cfg.color}`}>
           {cfg.label}

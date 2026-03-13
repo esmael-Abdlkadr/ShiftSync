@@ -4,15 +4,17 @@ import { useState } from 'react';
 import { toZonedTime } from 'date-fns-tz';
 import {
   X, Clock, MapPin, Briefcase, Users, Star, Globe, Trash2, Pencil,
-  CheckCircle, AlertCircle, Loader2, UserMinus,
+  CheckCircle, AlertCircle, Loader2, UserMinus, History,
 } from 'lucide-react';
 import { usePublishShift, useUnpublishShift, useDeleteShift, useShift } from '@/hooks/api/use-shifts';
 import { useRemoveAssignment } from '@/hooks/api/use-assignments';
+import { useShiftAuditHistory } from '@/hooks/api/use-audit';
 import { AssignStaffModal } from './assign-staff-modal';
 import { EditShiftModal } from './edit-shift-modal';
 import { ConfirmDelete } from '@/components/ui/confirmation-modal';
 import toast from 'react-hot-toast';
 import type { Shift } from '@/types/shift';
+import type { AuditLogEntry } from '@/types/audit';
 
 interface ShiftDetailPanelProps {
   shift: Shift;
@@ -25,7 +27,64 @@ function formatDateTime(utcStr: string, tz: string): string {
   });
 }
 
+type PanelTab = 'details' | 'history';
+
+function ActionBadge({ action }: { action: string }) {
+  let colour = 'bg-slate-100 text-slate-600';
+  if (['CREATE', 'PUBLISH', 'APPROVE_SWAP', 'APPROVE_DROP'].includes(action))
+    colour = 'bg-emerald-100 text-emerald-700';
+  else if (['UPDATE', 'UNPUBLISH', 'ASSIGN_STAFF'].includes(action))
+    colour = 'bg-blue-100 text-blue-700';
+  else if (['DELETE', 'UNASSIGN_STAFF', 'REJECT_SWAP', 'REJECT_DROP'].includes(action))
+    colour = 'bg-red-100 text-red-700';
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${colour}`}>
+      {action.replace(/_/g, ' ')}
+    </span>
+  );
+}
+
+function HistoryTimeline({ entries }: { entries: AuditLogEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <History className="h-8 w-8 text-slate-300 mb-2" />
+        <p className="text-sm text-slate-500">No history recorded yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <ol className="relative border-l border-slate-200 ml-3 space-y-4 py-2">
+      {entries.map((entry) => (
+        <li key={entry.id} className="ml-4">
+          <div className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-slate-300" />
+          <div className="flex items-start gap-2 flex-wrap">
+            <ActionBadge action={entry.action} />
+            <span className="text-xs text-slate-500 mt-0.5">
+              by{' '}
+              <span className="font-medium text-slate-700">
+                {entry.user.firstName} {entry.user.lastName}
+              </span>
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {new Date(entry.createdAt).toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true,
+            })}
+          </p>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPanelProps) {
+  const [tab, setTab] = useState<PanelTab>('details');
   const [showAssign, setShowAssign] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [assignmentToRemove, setAssignmentToRemove] = useState<string | null>(null);
@@ -33,6 +92,9 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
   // Always use fresh shift data so headcount/assignments stay in sync after mutations
   const { data: freshShift } = useShift(initialShift.id);
   const shift = (freshShift as Shift | undefined) ?? initialShift;
+
+  const { data: historyEntries = [], isLoading: historyLoading } =
+    useShiftAuditHistory(shift.id);
 
   const publish = usePublishShift();
   const unpublish = useUnpublishShift();
@@ -53,18 +115,9 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
         await publish.mutateAsync(shift.id);
         toast.success('Schedule published — staff will be notified');
       }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Action failed');
-    }
-  };
-
-  const handleDelete = async () => {
-    try {
-      await deleteShift.mutateAsync(shift.id);
-      toast.success('Shift deleted');
-      onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to delete shift');
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg ?? 'Action failed');
     }
   };
 
@@ -102,7 +155,25 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
           </button>
         </div>
 
+        {/* Tab bar */}
+        <div className="flex border-b border-slate-200 px-5">
+          {(['details', 'history'] as PanelTab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`py-2.5 px-1 mr-4 text-sm font-medium border-b-2 transition-colors capitalize ${
+                tab === t
+                  ? 'border-slate-900 text-slate-900'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
         {/* Details */}
+        {tab === 'details' && (
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="space-y-2.5">
             <div className="flex items-center gap-2 text-sm text-slate-700">
@@ -172,6 +243,20 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
             </button>
           )}
         </div>
+        )}
+
+        {/* History tab */}
+        {tab === 'history' && (
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <HistoryTimeline entries={historyEntries} />
+            )}
+          </div>
+        )}
 
         {/* Footer actions */}
         <div className="px-5 py-4 border-t border-slate-200 space-y-2">
@@ -197,7 +282,7 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
                 Edit
               </button>
               <button
-                onClick={() => deleteShift.mutateAsync(shift.id).then(() => { toast.success('Shift deleted'); onClose(); }).catch((e: any) => toast.error(e?.response?.data?.message ?? 'Failed'))}
+                onClick={() => { void deleteShift.mutateAsync(shift.id).then(() => { toast.success('Shift deleted'); onClose(); }).catch((e: unknown) => { const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message; toast.error(msg ?? 'Failed'); }); }}
                 disabled={deleteShift.isPending}
                 className="flex-1 py-2 px-4 flex items-center justify-center gap-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
               >

@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeftRight, ArrowDown, CheckCircle, Inbox, Clock } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { SwapReviewCard } from '@/components/swaps/swap-review-card';
@@ -54,16 +53,12 @@ function OpenDropCard({ drop }: { drop: DropRequest }) {
 
 export default function ManagerRequestsPage() {
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<Tab>(() => {
-    const t = searchParams.get('tab');
-    if (t === 'open-drops' || t === 'drops' || t === 'swaps') return t;
-    return 'swaps';
-  });
+  const router = useRouter();
 
-  useEffect(() => {
-    const t = searchParams.get('tab');
-    if (t === 'open-drops' || t === 'drops' || t === 'swaps') setTab(t);
-  }, [searchParams]);
+  const rawTab = searchParams.get('tab');
+  const tab: Tab = rawTab === 'open-drops' || rawTab === 'drops' || rawTab === 'swaps' ? rawTab : 'swaps';
+
+  const setTab = (t: Tab) => router.replace(`?tab=${t}`);
 
   const { data: swaps, isLoading: swapsLoading } = useSwaps({ status: 'PENDING_APPROVAL' });
   const { data: openDrops, isLoading: openDropsLoading } = useDrops({ status: 'OPEN' });

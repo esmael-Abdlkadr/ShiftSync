@@ -37,8 +37,9 @@ export function DropRequestModal({ shift, isOpen, onClose }: Props) {
       await createDrop.mutateAsync({ shiftId: shift.id });
       toast.success('Shift dropped — it is now open for eligible staff to claim.');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to create drop request.');
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(msg ?? 'Failed to create drop request.');
     }
   };
 
