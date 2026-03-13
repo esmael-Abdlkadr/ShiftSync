@@ -7,6 +7,8 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { SkillsModule } from './skills/skills.module';
 import { LocationsModule } from './locations/locations.module';
+import { ShiftsModule } from './shifts/shifts.module';
+import { ConstraintsModule } from './constraints/constraints.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { LocationsModule } from './locations/locations.module';
     UsersModule,
     SkillsModule,
     LocationsModule,
+    ShiftsModule,
+    ConstraintsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
