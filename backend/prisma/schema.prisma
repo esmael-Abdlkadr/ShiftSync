@@ -62,6 +62,7 @@ model User {
   timezone           String   @default("America/Los_Angeles")
   desiredWeeklyHours Int?
   hourlyRate         Decimal? @db.Decimal(10, 2)
+  isActive           Boolean  @default(true)
 
   skills                 UserSkill[]
   certifiedLocations     UserLocationCertification[]

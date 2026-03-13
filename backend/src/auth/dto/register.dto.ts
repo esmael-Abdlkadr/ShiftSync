@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsEnum, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsEnum, IsOptional, IsInt, IsNumber, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { UserRole } from '@prisma/client';
 
@@ -37,4 +37,10 @@ export class RegisterDto {
   @Max(60)
   @IsOptional()
   desiredWeeklyHours?: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  hourlyRate?: number;
 }

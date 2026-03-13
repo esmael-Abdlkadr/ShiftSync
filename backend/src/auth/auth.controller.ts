@@ -7,7 +7,7 @@ import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
-import { JwtPayload } from './types/jwt-payload';
+import type { JwtPayload } from './types/jwt-payload';
 
 @Controller('auth')
 export class AuthController {

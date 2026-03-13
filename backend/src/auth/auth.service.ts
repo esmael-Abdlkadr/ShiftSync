@@ -68,6 +68,7 @@ export class AuthService {
         role: registerDto.role || UserRole.STAFF,
         timezone: registerDto.timezone || 'America/Los_Angeles',
         desiredWeeklyHours: registerDto.desiredWeeklyHours,
+        hourlyRate: registerDto.hourlyRate,
       },
     });
 
