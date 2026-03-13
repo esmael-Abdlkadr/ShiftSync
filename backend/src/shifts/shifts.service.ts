@@ -6,7 +6,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConstraintsService } from '../constraints/constraints.service';
-import { UserRole, ShiftStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UserRole, ShiftStatus, SwapRequestStatus } from '@prisma/client';
 import { differenceInMinutes } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import type { CreateShiftDto } from './dto/create-shift.dto';
@@ -20,6 +21,7 @@ export class ShiftsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly constraints: ConstraintsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async findAll(actor: JwtPayload, query: QueryShiftsDto) {
@@ -34,7 +36,9 @@ export class ShiftsService {
       });
       const managedIds = managed.map((m) => m.locationId);
       where.locationId = locationId
-        ? managedIds.includes(locationId) ? locationId : '__none__'
+        ? managedIds.includes(locationId)
+          ? locationId
+          : '__none__'
         : { in: managedIds };
     } else if (locationId) {
       where.locationId = locationId;
@@ -58,7 +62,12 @@ export class ShiftsService {
         assignments: {
           include: {
             user: {
-              select: { id: true, firstName: true, lastName: true, email: true },
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
             },
           },
         },
@@ -75,8 +84,18 @@ export class ShiftsService {
         requiredSkill: { select: { id: true, name: true } },
         assignments: {
           include: {
-            user: { select: { id: true, firstName: true, lastName: true, email: true, hourlyRate: true } },
-            assignedBy: { select: { id: true, firstName: true, lastName: true } },
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                hourlyRate: true,
+              },
+            },
+            assignedBy: {
+              select: { id: true, firstName: true, lastName: true },
+            },
           },
         },
       },
@@ -107,7 +126,15 @@ export class ShiftsService {
       },
     });
 
-    await this.writeAuditLog(actor.sub, 'CREATE', 'Shift', shift.id, shift.locationId, null, shift);
+    await this.writeAuditLog(
+      actor.sub,
+      'CREATE',
+      'Shift',
+      shift.id,
+      shift.locationId,
+      null,
+      shift,
+    );
     return shift;
   }
 
@@ -127,18 +154,69 @@ export class ShiftsService {
         ...(dto.endTime && { endTime: new Date(dto.endTime) }),
         ...(dto.headcount !== undefined && { headcount: dto.headcount }),
         ...(dto.isPremium !== undefined && { isPremium: dto.isPremium }),
-        ...(dto.editCutoffHours !== undefined && { editCutoffHours: dto.editCutoffHours }),
+        ...(dto.editCutoffHours !== undefined && {
+          editCutoffHours: dto.editCutoffHours,
+        }),
         version: { increment: 1 },
       },
       include: {
         location: { select: { id: true, name: true, timezone: true } },
         requiredSkill: { select: { id: true, name: true } },
-        assignments: { include: { user: { select: { id: true, firstName: true, lastName: true } } } },
+        assignments: {
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true } },
+          },
+        },
       },
     });
 
-    await this.writeAuditLog(actor.sub, 'UPDATE', 'Shift', id, shift.locationId, before, updated);
+    await this.writeAuditLog(
+      actor.sub,
+      'UPDATE',
+      'Shift',
+      id,
+      shift.locationId,
+      before,
+      updated,
+    );
+    await this.cancelPendingSwapsForShift(id, shift.date);
     return updated;
+  }
+
+  private async cancelPendingSwapsForShift(shiftId: string, shiftDate: Date) {
+    const pendingSwaps = await this.prisma.swapRequest.findMany({
+      where: {
+        shiftId,
+        status: {
+          in: [
+            SwapRequestStatus.PENDING_PARTNER,
+            SwapRequestStatus.PENDING_APPROVAL,
+          ],
+        },
+      },
+      select: { id: true, initiatorId: true, targetId: true },
+    });
+
+    if (pendingSwaps.length === 0) return;
+
+    await this.prisma.swapRequest.updateMany({
+      where: { id: { in: pendingSwaps.map((s) => s.id) } },
+      data: {
+        status: SwapRequestStatus.CANCELLED,
+        cancelledReason: 'Shift was modified by manager.',
+      },
+    });
+
+    const dateStr = shiftDate.toISOString().split('T')[0];
+    for (const swap of pendingSwaps) {
+      await this.notifications.notifyMany(
+        [swap.initiatorId, swap.targetId],
+        'SWAP_SHIFT_EDITED',
+        'Swap Request Cancelled — Shift Modified',
+        `Your swap request for the shift on ${dateStr} was automatically cancelled because the shift was modified by a manager.`,
+        { swapId: swap.id, shiftId },
+      );
+    }
   }
 
   async remove(actor: JwtPayload, id: string) {
@@ -146,11 +224,21 @@ export class ShiftsService {
     await this.assertLocationAccess(actor, shift.locationId);
 
     if (shift.status === ShiftStatus.PUBLISHED) {
-      throw new BadRequestException('Cannot delete a published shift. Unpublish it first.');
+      throw new BadRequestException(
+        'Cannot delete a published shift. Unpublish it first.',
+      );
     }
 
     await this.prisma.shift.delete({ where: { id } });
-    await this.writeAuditLog(actor.sub, 'DELETE', 'Shift', id, shift.locationId, shift, null);
+    await this.writeAuditLog(
+      actor.sub,
+      'DELETE',
+      'Shift',
+      id,
+      shift.locationId,
+      shift,
+      null,
+    );
     return { message: 'Shift deleted successfully' };
   }
 
@@ -167,7 +255,15 @@ export class ShiftsService {
       data: { status: ShiftStatus.PUBLISHED, publishedAt: new Date() },
     });
 
-    await this.writeAuditLog(actor.sub, 'PUBLISH', 'Shift', id, shift.locationId, { status: shift.status }, { status: updated.status });
+    await this.writeAuditLog(
+      actor.sub,
+      'PUBLISH',
+      'Shift',
+      id,
+      shift.locationId,
+      { status: shift.status },
+      { status: updated.status },
+    );
     return updated;
   }
 
@@ -179,7 +275,8 @@ export class ShiftsService {
       throw new BadRequestException('Shift is already in draft.');
     }
 
-    const hoursUntilShift = (shift.startTime.getTime() - Date.now()) / (1000 * 60 * 60);
+    const hoursUntilShift =
+      (shift.startTime.getTime() - Date.now()) / (1000 * 60 * 60);
     if (hoursUntilShift < shift.editCutoffHours) {
       throw new BadRequestException(
         `Cannot unpublish: shift starts in ${hoursUntilShift.toFixed(1)} hours, which is within the ${shift.editCutoffHours}-hour edit cutoff.`,
@@ -191,7 +288,15 @@ export class ShiftsService {
       data: { status: ShiftStatus.DRAFT, publishedAt: null },
     });
 
-    await this.writeAuditLog(actor.sub, 'UNPUBLISH', 'Shift', id, shift.locationId, { status: shift.status }, { status: updated.status });
+    await this.writeAuditLog(
+      actor.sub,
+      'UNPUBLISH',
+      'Shift',
+      id,
+      shift.locationId,
+      { status: shift.status },
+      { status: updated.status },
+    );
     return updated;
   }
 
@@ -200,7 +305,9 @@ export class ShiftsService {
     await this.assertLocationAccess(actor, shift.locationId);
 
     if (shift.assignments.length >= shift.headcount) {
-      throw new BadRequestException(`This shift is already fully staffed (${shift.headcount}/${shift.headcount}).`);
+      throw new BadRequestException(
+        `This shift is already fully staffed (${shift.headcount}/${shift.headcount}).`,
+      );
     }
 
     const constraintResult = await this.constraints.check({
@@ -234,23 +341,44 @@ export class ShiftsService {
             overrideNotes: dto.overrideNotes ?? null,
           },
           include: {
-            user: { select: { id: true, firstName: true, lastName: true, email: true } },
-            assignedBy: { select: { id: true, firstName: true, lastName: true } },
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+            assignedBy: {
+              select: { id: true, firstName: true, lastName: true },
+            },
           },
         });
       });
 
-      await this.writeAuditLog(actor.sub, 'ASSIGN_STAFF', 'ShiftAssignment', assignment.id, shift.locationId, null, {
-        shiftId,
-        userId: dto.userId,
-        overrideReason: dto.overrideReason,
-        warnings: constraintResult.violations.filter((v) => v.severity === 'warning'),
-      });
+      await this.writeAuditLog(
+        actor.sub,
+        'ASSIGN_STAFF',
+        'ShiftAssignment',
+        assignment.id,
+        shift.locationId,
+        null,
+        {
+          shiftId,
+          userId: dto.userId,
+          overrideReason: dto.overrideReason,
+          warnings: constraintResult.violations.filter(
+            (v) => v.severity === 'warning',
+          ),
+        },
+      );
 
       return { assigned: true, assignment, constraintResult };
     } catch (err: any) {
       if (err?.code === 'P2002') {
-        throw new BadRequestException('This staff member is already assigned to this shift.');
+        throw new BadRequestException(
+          'This staff member is already assigned to this shift.',
+        );
       }
       throw err;
     }
@@ -267,7 +395,15 @@ export class ShiftsService {
     if (!assignment) throw new NotFoundException('Assignment not found.');
 
     await this.prisma.shiftAssignment.delete({ where: { id: assignment.id } });
-    await this.writeAuditLog(actor.sub, 'REMOVE_ASSIGNMENT', 'ShiftAssignment', assignment.id, shift.locationId, { userId, shiftId }, null);
+    await this.writeAuditLog(
+      actor.sub,
+      'REMOVE_ASSIGNMENT',
+      'ShiftAssignment',
+      assignment.id,
+      shift.locationId,
+      { userId, shiftId },
+      null,
+    );
 
     return { message: 'Assignment removed successfully.' };
   }
@@ -283,7 +419,9 @@ export class ShiftsService {
         isActive: true,
         id: { notIn: assignedUserIds },
         skills: { some: { skillId: shift.skillId } },
-        certifiedLocations: { some: { locationId: shift.locationId, decertifiedAt: null } },
+        certifiedLocations: {
+          some: { locationId: shift.locationId, decertifiedAt: null },
+        },
       },
       include: {
         shiftAssignments: {
@@ -302,12 +440,19 @@ export class ShiftsService {
       });
 
       const weeklyMinutes = candidate.shiftAssignments
-        .filter((a) => a.shift.startTime >= weekStart && a.shift.startTime <= weekEnd)
-        .reduce((sum, a) => sum + differenceInMinutes(a.shift.endTime, a.shift.startTime), 0);
+        .filter(
+          (a) => a.shift.startTime >= weekStart && a.shift.startTime <= weekEnd,
+        )
+        .reduce(
+          (sum, a) =>
+            sum + differenceInMinutes(a.shift.endTime, a.shift.startTime),
+          0,
+        );
 
       const currentWeeklyHours = Math.round((weeklyMinutes / 60) * 10) / 10;
       const shiftMinutes = differenceInMinutes(shift.endTime, shift.startTime);
-      const projectedHours = Math.round(((weeklyMinutes + shiftMinutes) / 60) * 10) / 10;
+      const projectedHours =
+        Math.round(((weeklyMinutes + shiftMinutes) / 60) * 10) / 10;
 
       return {
         id: candidate.id,
@@ -317,7 +462,12 @@ export class ShiftsService {
         hasConflict,
         currentWeeklyHours,
         projectedWeeklyHours: projectedHours,
-        overtimeRisk: projectedHours >= 40 ? 'high' : projectedHours >= 35 ? 'medium' : 'low',
+        overtimeRisk:
+          projectedHours >= 40
+            ? 'high'
+            : projectedHours >= 35
+              ? 'medium'
+              : 'low',
       };
     });
 
@@ -348,7 +498,10 @@ export class ShiftsService {
     const byUser = new Map<string, { user: any; minutes: number }>();
     for (const a of assignments) {
       const existing = byUser.get(a.userId) ?? { user: a.user, minutes: 0 };
-      existing.minutes += differenceInMinutes(a.shift.endTime, a.shift.startTime);
+      existing.minutes += differenceInMinutes(
+        a.shift.endTime,
+        a.shift.startTime,
+      );
       byUser.set(a.userId, existing);
     }
 
@@ -357,13 +510,18 @@ export class ShiftsService {
       name: `${user.firstName} ${user.lastName}`,
       weeklyHours: Math.round((minutes / 60) * 10) / 10,
       status:
-        minutes / 60 >= 40 ? 'overtime' : minutes / 60 >= 35 ? 'near_overtime' : 'on_track',
+        minutes / 60 >= 40
+          ? 'overtime'
+          : minutes / 60 >= 35
+            ? 'near_overtime'
+            : 'on_track',
     }));
   }
 
   private assertEditAllowed(shift: any) {
     if (shift.status === ShiftStatus.PUBLISHED && shift.publishedAt) {
-      const hoursUntilShift = (shift.startTime.getTime() - Date.now()) / (1000 * 60 * 60);
+      const hoursUntilShift =
+        (shift.startTime.getTime() - Date.now()) / (1000 * 60 * 60);
       if (hoursUntilShift < shift.editCutoffHours) {
         throw new BadRequestException(
           `Cannot edit a published shift within ${shift.editCutoffHours} hours of start time.`,

@@ -52,7 +52,7 @@ async function main() {
     }),
   ]);
 
-  console.log('Created locations:', locations.map(l => l.name).join(', '));
+  console.log('Created locations:', locations.map((l) => l.name).join(', '));
 
   // Create Skills
   const skills = await Promise.all([
@@ -78,25 +78,35 @@ async function main() {
     }),
   ]);
 
-  console.log('Created skills:', skills.map(s => s.name).join(', '));
+  console.log('Created skills:', skills.map((s) => s.name).join(', '));
 
   // Create Admins (2)
   const admins = await Promise.all([
     prisma.user.upsert({
       where: { email: 'admin@coastaleats.com' },
-      update: { passwordHash: adminPasswordHash },
+      update: {
+        passwordHash: adminPasswordHash,
+        firstName: 'Admin',
+        lastName: 'User',
+        role: UserRole.ADMIN,
+      },
       create: {
         email: 'admin@coastaleats.com',
         passwordHash: adminPasswordHash,
-        firstName: 'Alice',
-        lastName: 'Admin',
+        firstName: 'Admin',
+        lastName: 'User',
         role: UserRole.ADMIN,
         timezone: 'America/Los_Angeles',
       },
     }),
     prisma.user.upsert({
       where: { email: 'admin2@coastaleats.com' },
-      update: { passwordHash: adminPasswordHash },
+      update: {
+        passwordHash: adminPasswordHash,
+        firstName: 'Bob',
+        lastName: 'Admin',
+        role: UserRole.ADMIN,
+      },
       create: {
         email: 'admin2@coastaleats.com',
         passwordHash: adminPasswordHash,
@@ -108,13 +118,18 @@ async function main() {
     }),
   ]);
 
-  console.log('Created admins:', admins.map(a => a.email).join(', '));
+  console.log('Created admins:', admins.map((a) => a.email).join(', '));
 
   // Create Managers (4)
   const managers = await Promise.all([
     prisma.user.upsert({
       where: { email: 'mike@coastaleats.com' },
-      update: { passwordHash: managerPasswordHash },
+      update: {
+        passwordHash: managerPasswordHash,
+        firstName: 'Mike',
+        lastName: 'Manager',
+        role: UserRole.MANAGER,
+      },
       create: {
         email: 'mike@coastaleats.com',
         passwordHash: managerPasswordHash,
@@ -126,7 +141,12 @@ async function main() {
     }),
     prisma.user.upsert({
       where: { email: 'nina@coastaleats.com' },
-      update: { passwordHash: managerPasswordHash },
+      update: {
+        passwordHash: managerPasswordHash,
+        firstName: 'Nina',
+        lastName: 'Manager',
+        role: UserRole.MANAGER,
+      },
       create: {
         email: 'nina@coastaleats.com',
         passwordHash: managerPasswordHash,
@@ -138,7 +158,12 @@ async function main() {
     }),
     prisma.user.upsert({
       where: { email: 'oscar@coastaleats.com' },
-      update: { passwordHash: managerPasswordHash },
+      update: {
+        passwordHash: managerPasswordHash,
+        firstName: 'Oscar',
+        lastName: 'Manager',
+        role: UserRole.MANAGER,
+      },
       create: {
         email: 'oscar@coastaleats.com',
         passwordHash: managerPasswordHash,
@@ -150,7 +175,12 @@ async function main() {
     }),
     prisma.user.upsert({
       where: { email: 'pat@coastaleats.com' },
-      update: { passwordHash: managerPasswordHash },
+      update: {
+        passwordHash: managerPasswordHash,
+        firstName: 'Pat',
+        lastName: 'Manager',
+        role: UserRole.MANAGER,
+      },
       create: {
         email: 'pat@coastaleats.com',
         passwordHash: managerPasswordHash,
@@ -162,36 +192,61 @@ async function main() {
     }),
   ]);
 
-  console.log('Created managers:', managers.map(m => m.email).join(', '));
+  console.log('Created managers:', managers.map((m) => m.email).join(', '));
 
   // Assign managers to locations
   await Promise.all([
     // Mike manages Downtown SF and Marina SF
     prisma.locationManager.upsert({
-      where: { userId_locationId: { userId: managers[0].id, locationId: 'loc_downtown_sf' } },
+      where: {
+        userId_locationId: {
+          userId: managers[0].id,
+          locationId: 'loc_downtown_sf',
+        },
+      },
       update: {},
       create: { userId: managers[0].id, locationId: 'loc_downtown_sf' },
     }),
     prisma.locationManager.upsert({
-      where: { userId_locationId: { userId: managers[0].id, locationId: 'loc_marina_sf' } },
+      where: {
+        userId_locationId: {
+          userId: managers[0].id,
+          locationId: 'loc_marina_sf',
+        },
+      },
       update: {},
       create: { userId: managers[0].id, locationId: 'loc_marina_sf' },
     }),
     // Nina manages Midtown NYC
     prisma.locationManager.upsert({
-      where: { userId_locationId: { userId: managers[1].id, locationId: 'loc_midtown_nyc' } },
+      where: {
+        userId_locationId: {
+          userId: managers[1].id,
+          locationId: 'loc_midtown_nyc',
+        },
+      },
       update: {},
       create: { userId: managers[1].id, locationId: 'loc_midtown_nyc' },
     }),
     // Oscar manages Brooklyn NYC
     prisma.locationManager.upsert({
-      where: { userId_locationId: { userId: managers[2].id, locationId: 'loc_brooklyn_nyc' } },
+      where: {
+        userId_locationId: {
+          userId: managers[2].id,
+          locationId: 'loc_brooklyn_nyc',
+        },
+      },
       update: {},
       create: { userId: managers[2].id, locationId: 'loc_brooklyn_nyc' },
     }),
     // Pat also manages Downtown SF (shared with Mike)
     prisma.locationManager.upsert({
-      where: { userId_locationId: { userId: managers[3].id, locationId: 'loc_downtown_sf' } },
+      where: {
+        userId_locationId: {
+          userId: managers[3].id,
+          locationId: 'loc_downtown_sf',
+        },
+      },
       update: {},
       create: { userId: managers[3].id, locationId: 'loc_downtown_sf' },
     }),
@@ -201,29 +256,132 @@ async function main() {
 
   // Create Staff (16) with various edge cases
   const staffData = [
-    { email: 'sarah@coastaleats.com', firstName: 'Sarah', lastName: 'Server', timezone: 'America/Los_Angeles', desiredWeeklyHours: 30 },
-    { email: 'john@coastaleats.com', firstName: 'John', lastName: 'Bartender', timezone: 'America/Los_Angeles', desiredWeeklyHours: 40 },
-    { email: 'maria@coastaleats.com', firstName: 'Maria', lastName: 'Cook', timezone: 'America/Los_Angeles', desiredWeeklyHours: 35 },
-    { email: 'alex@coastaleats.com', firstName: 'Alex', lastName: 'Flex', timezone: 'America/Los_Angeles', desiredWeeklyHours: 40 },
-    { email: 'lisa@coastaleats.com', firstName: 'Lisa', lastName: 'Weekend', timezone: 'America/Los_Angeles', desiredWeeklyHours: 20 },
-    { email: 'tom@coastaleats.com', firstName: 'Tom', lastName: 'Overtime', timezone: 'America/Los_Angeles', desiredWeeklyHours: 45 },
-    { email: 'emma@coastaleats.com', firstName: 'Emma', lastName: 'Part', timezone: 'America/New_York', desiredWeeklyHours: 15 },
-    { email: 'chris@coastaleats.com', firstName: 'Chris', lastName: 'Cross', timezone: 'America/Los_Angeles', desiredWeeklyHours: 35 },
-    { email: 'dana@coastaleats.com', firstName: 'Dana', lastName: 'Double', timezone: 'America/Los_Angeles', desiredWeeklyHours: 40 },
-    { email: 'frank@coastaleats.com', firstName: 'Frank', lastName: 'Night', timezone: 'America/New_York', desiredWeeklyHours: 35 },
-    { email: 'grace@coastaleats.com', firstName: 'Grace', lastName: 'New', timezone: 'America/New_York', desiredWeeklyHours: 25 },
-    { email: 'henry@coastaleats.com', firstName: 'Henry', lastName: 'Host', timezone: 'America/New_York', desiredWeeklyHours: 30 },
-    { email: 'ivy@coastaleats.com', firstName: 'Ivy', lastName: 'Irregular', timezone: 'America/Los_Angeles', desiredWeeklyHours: 20 },
-    { email: 'jake@coastaleats.com', firstName: 'Jake', lastName: 'Junior', timezone: 'America/Los_Angeles', desiredWeeklyHours: 10 },
-    { email: 'kate@coastaleats.com', firstName: 'Kate', lastName: 'Kitchen', timezone: 'America/New_York', desiredWeeklyHours: 38 },
-    { email: 'leo@coastaleats.com', firstName: 'Leo', lastName: 'Limited', timezone: 'America/New_York', desiredWeeklyHours: 15 },
+    {
+      email: 'sarah@coastaleats.com',
+      firstName: 'Sarah',
+      lastName: 'Server',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 30,
+    },
+    {
+      email: 'john@coastaleats.com',
+      firstName: 'John',
+      lastName: 'Bartender',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 40,
+    },
+    {
+      email: 'maria@coastaleats.com',
+      firstName: 'Maria',
+      lastName: 'Cook',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 35,
+    },
+    {
+      email: 'alex@coastaleats.com',
+      firstName: 'Alex',
+      lastName: 'Flex',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 40,
+    },
+    {
+      email: 'lisa@coastaleats.com',
+      firstName: 'Lisa',
+      lastName: 'Weekend',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 20,
+    },
+    {
+      email: 'tom@coastaleats.com',
+      firstName: 'Tom',
+      lastName: 'Overtime',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 45,
+    },
+    {
+      email: 'emma@coastaleats.com',
+      firstName: 'Emma',
+      lastName: 'Part',
+      timezone: 'America/New_York',
+      desiredWeeklyHours: 15,
+    },
+    {
+      email: 'chris@coastaleats.com',
+      firstName: 'Chris',
+      lastName: 'Cross',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 35,
+    },
+    {
+      email: 'dana@coastaleats.com',
+      firstName: 'Dana',
+      lastName: 'Double',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 40,
+    },
+    {
+      email: 'frank@coastaleats.com',
+      firstName: 'Frank',
+      lastName: 'Night',
+      timezone: 'America/New_York',
+      desiredWeeklyHours: 35,
+    },
+    {
+      email: 'grace@coastaleats.com',
+      firstName: 'Grace',
+      lastName: 'New',
+      timezone: 'America/New_York',
+      desiredWeeklyHours: 25,
+    },
+    {
+      email: 'henry@coastaleats.com',
+      firstName: 'Henry',
+      lastName: 'Host',
+      timezone: 'America/New_York',
+      desiredWeeklyHours: 30,
+    },
+    {
+      email: 'ivy@coastaleats.com',
+      firstName: 'Ivy',
+      lastName: 'Irregular',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 20,
+    },
+    {
+      email: 'jake@coastaleats.com',
+      firstName: 'Jake',
+      lastName: 'Junior',
+      timezone: 'America/Los_Angeles',
+      desiredWeeklyHours: 10,
+    },
+    {
+      email: 'kate@coastaleats.com',
+      firstName: 'Kate',
+      lastName: 'Kitchen',
+      timezone: 'America/New_York',
+      desiredWeeklyHours: 38,
+    },
+    {
+      email: 'leo@coastaleats.com',
+      firstName: 'Leo',
+      lastName: 'Limited',
+      timezone: 'America/New_York',
+      desiredWeeklyHours: 15,
+    },
   ];
 
   const staff = await Promise.all(
-    staffData.map(s =>
+    staffData.map((s) =>
       prisma.user.upsert({
         where: { email: s.email },
-        update: { passwordHash: staffPasswordHash },
+        update: {
+          passwordHash: staffPasswordHash,
+          firstName: s.firstName,
+          lastName: s.lastName,
+          role: UserRole.STAFF,
+          timezone: s.timezone,
+          desiredWeeklyHours: s.desiredWeeklyHours,
+        },
         create: {
           email: s.email,
           passwordHash: staffPasswordHash,
@@ -233,14 +391,15 @@ async function main() {
           timezone: s.timezone,
           desiredWeeklyHours: s.desiredWeeklyHours,
         },
-      })
-    )
+      }),
+    ),
   );
 
   console.log('Created staff:', staff.length);
 
   // Helper to get staff by first name
-  const getStaff = (firstName: string) => staff.find(s => s.firstName === firstName)!;
+  const getStaff = (firstName: string) =>
+    staff.find((s) => s.firstName === firstName)!;
 
   // Assign Skills to Staff
   const skillAssignments = [
@@ -262,7 +421,7 @@ async function main() {
     { user: 'Leo', skills: ['Bartender'] },
   ];
 
-  const getSkill = (name: string) => skills.find(s => s.name === name)!;
+  const getSkill = (name: string) => skills.find((s) => s.name === name)!;
 
   for (const assignment of skillAssignments) {
     const user = getStaff(assignment.user);
@@ -283,7 +442,15 @@ async function main() {
     { user: 'Sarah', locations: ['loc_downtown_sf'] },
     { user: 'John', locations: ['loc_downtown_sf', 'loc_marina_sf'] },
     { user: 'Maria', locations: ['loc_downtown_sf'] },
-    { user: 'Alex', locations: ['loc_downtown_sf', 'loc_marina_sf', 'loc_midtown_nyc', 'loc_brooklyn_nyc'] },
+    {
+      user: 'Alex',
+      locations: [
+        'loc_downtown_sf',
+        'loc_marina_sf',
+        'loc_midtown_nyc',
+        'loc_brooklyn_nyc',
+      ],
+    },
     { user: 'Lisa', locations: ['loc_marina_sf'] },
     { user: 'Tom', locations: ['loc_downtown_sf'] },
     { user: 'Emma', locations: ['loc_midtown_nyc'] },
@@ -312,121 +479,172 @@ async function main() {
   console.log('Assigned location certifications');
 
   // Availability patterns
-  const availabilityPatterns: { user: string; days: { day: DayOfWeek; start: string; end: string }[] }[] = [
-    { user: 'Sarah', days: [
-      { day: DayOfWeek.MONDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.TUESDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.THURSDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.FRIDAY, start: '09:00', end: '17:00' },
-    ]},
-    { user: 'John', days: [
-      { day: DayOfWeek.MONDAY, start: '16:00', end: '00:00' },
-      { day: DayOfWeek.TUESDAY, start: '16:00', end: '00:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '16:00', end: '00:00' },
-      { day: DayOfWeek.THURSDAY, start: '16:00', end: '00:00' },
-      { day: DayOfWeek.FRIDAY, start: '16:00', end: '00:00' },
-      { day: DayOfWeek.SATURDAY, start: '16:00', end: '00:00' },
-      { day: DayOfWeek.SUNDAY, start: '16:00', end: '00:00' },
-    ]},
-    { user: 'Maria', days: [
-      { day: DayOfWeek.TUESDAY, start: '06:00', end: '16:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '06:00', end: '16:00' },
-      { day: DayOfWeek.THURSDAY, start: '06:00', end: '16:00' },
-      { day: DayOfWeek.FRIDAY, start: '06:00', end: '16:00' },
-      { day: DayOfWeek.SATURDAY, start: '06:00', end: '16:00' },
-    ]},
-    { user: 'Alex', days: [
-      { day: DayOfWeek.MONDAY, start: '08:00', end: '20:00' },
-      { day: DayOfWeek.TUESDAY, start: '08:00', end: '20:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '08:00', end: '20:00' },
-      { day: DayOfWeek.THURSDAY, start: '08:00', end: '20:00' },
-      { day: DayOfWeek.FRIDAY, start: '08:00', end: '20:00' },
-      { day: DayOfWeek.SATURDAY, start: '08:00', end: '20:00' },
-      { day: DayOfWeek.SUNDAY, start: '08:00', end: '20:00' },
-    ]},
-    { user: 'Lisa', days: [
-      { day: DayOfWeek.FRIDAY, start: '09:00', end: '21:00' },
-      { day: DayOfWeek.SATURDAY, start: '09:00', end: '21:00' },
-      { day: DayOfWeek.SUNDAY, start: '09:00', end: '21:00' },
-    ]},
-    { user: 'Tom', days: [
-      { day: DayOfWeek.MONDAY, start: '00:00', end: '23:59' },
-      { day: DayOfWeek.TUESDAY, start: '00:00', end: '23:59' },
-      { day: DayOfWeek.WEDNESDAY, start: '00:00', end: '23:59' },
-      { day: DayOfWeek.THURSDAY, start: '00:00', end: '23:59' },
-      { day: DayOfWeek.FRIDAY, start: '00:00', end: '23:59' },
-      { day: DayOfWeek.SATURDAY, start: '00:00', end: '23:59' },
-      { day: DayOfWeek.SUNDAY, start: '00:00', end: '23:59' },
-    ]},
-    { user: 'Emma', days: [
-      { day: DayOfWeek.MONDAY, start: '10:00', end: '18:00' },
-      { day: DayOfWeek.TUESDAY, start: '10:00', end: '18:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '10:00', end: '18:00' },
-    ]},
-    { user: 'Chris', days: [
-      { day: DayOfWeek.MONDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.TUESDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.THURSDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.FRIDAY, start: '09:00', end: '17:00' },
-    ]},
-    { user: 'Dana', days: [
-      { day: DayOfWeek.MONDAY, start: '06:00', end: '18:00' },
-      { day: DayOfWeek.TUESDAY, start: '06:00', end: '18:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '06:00', end: '18:00' },
-      { day: DayOfWeek.THURSDAY, start: '06:00', end: '18:00' },
-      { day: DayOfWeek.FRIDAY, start: '06:00', end: '18:00' },
-    ]},
-    { user: 'Frank', days: [
-      { day: DayOfWeek.MONDAY, start: '18:00', end: '03:00' },
-      { day: DayOfWeek.TUESDAY, start: '18:00', end: '03:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '18:00', end: '03:00' },
-      { day: DayOfWeek.THURSDAY, start: '18:00', end: '03:00' },
-      { day: DayOfWeek.FRIDAY, start: '18:00', end: '03:00' },
-      { day: DayOfWeek.SATURDAY, start: '18:00', end: '03:00' },
-      { day: DayOfWeek.SUNDAY, start: '18:00', end: '03:00' },
-    ]},
-    { user: 'Grace', days: [
-      { day: DayOfWeek.MONDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.TUESDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.THURSDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.FRIDAY, start: '09:00', end: '17:00' },
-    ]},
-    { user: 'Henry', days: [
-      { day: DayOfWeek.MONDAY, start: '10:00', end: '22:00' },
-      { day: DayOfWeek.TUESDAY, start: '10:00', end: '22:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '10:00', end: '22:00' },
-      { day: DayOfWeek.THURSDAY, start: '10:00', end: '22:00' },
-      { day: DayOfWeek.FRIDAY, start: '10:00', end: '22:00' },
-      { day: DayOfWeek.SATURDAY, start: '10:00', end: '22:00' },
-      { day: DayOfWeek.SUNDAY, start: '10:00', end: '22:00' },
-    ]},
-    { user: 'Ivy', days: [
-      { day: DayOfWeek.MONDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.TUESDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.THURSDAY, start: '09:00', end: '17:00' },
-      { day: DayOfWeek.FRIDAY, start: '09:00', end: '17:00' },
-    ]},
-    { user: 'Jake', days: [
-      { day: DayOfWeek.SATURDAY, start: '09:00', end: '21:00' },
-      { day: DayOfWeek.SUNDAY, start: '09:00', end: '21:00' },
-    ]},
-    { user: 'Kate', days: [
-      { day: DayOfWeek.MONDAY, start: '05:00', end: '14:00' },
-      { day: DayOfWeek.TUESDAY, start: '05:00', end: '14:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '05:00', end: '14:00' },
-      { day: DayOfWeek.THURSDAY, start: '05:00', end: '14:00' },
-      { day: DayOfWeek.FRIDAY, start: '05:00', end: '14:00' },
-      { day: DayOfWeek.SATURDAY, start: '05:00', end: '14:00' },
-    ]},
-    { user: 'Leo', days: [
-      { day: DayOfWeek.TUESDAY, start: '16:00', end: '00:00' },
-      { day: DayOfWeek.WEDNESDAY, start: '16:00', end: '00:00' },
-      { day: DayOfWeek.THURSDAY, start: '16:00', end: '00:00' },
-    ]},
+  const availabilityPatterns: {
+    user: string;
+    days: { day: DayOfWeek; start: string; end: string }[];
+  }[] = [
+    {
+      user: 'Sarah',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.TUESDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.THURSDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.FRIDAY, start: '09:00', end: '17:00' },
+      ],
+    },
+    {
+      user: 'John',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '16:00', end: '00:00' },
+        { day: DayOfWeek.TUESDAY, start: '16:00', end: '00:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '16:00', end: '00:00' },
+        { day: DayOfWeek.THURSDAY, start: '16:00', end: '00:00' },
+        { day: DayOfWeek.FRIDAY, start: '16:00', end: '00:00' },
+        { day: DayOfWeek.SATURDAY, start: '16:00', end: '00:00' },
+        { day: DayOfWeek.SUNDAY, start: '16:00', end: '00:00' },
+      ],
+    },
+    {
+      user: 'Maria',
+      days: [
+        { day: DayOfWeek.TUESDAY, start: '06:00', end: '16:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '06:00', end: '16:00' },
+        { day: DayOfWeek.THURSDAY, start: '06:00', end: '16:00' },
+        { day: DayOfWeek.FRIDAY, start: '06:00', end: '16:00' },
+        { day: DayOfWeek.SATURDAY, start: '06:00', end: '16:00' },
+      ],
+    },
+    {
+      user: 'Alex',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '08:00', end: '20:00' },
+        { day: DayOfWeek.TUESDAY, start: '08:00', end: '20:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '08:00', end: '20:00' },
+        { day: DayOfWeek.THURSDAY, start: '08:00', end: '20:00' },
+        { day: DayOfWeek.FRIDAY, start: '08:00', end: '20:00' },
+        { day: DayOfWeek.SATURDAY, start: '08:00', end: '20:00' },
+        { day: DayOfWeek.SUNDAY, start: '08:00', end: '20:00' },
+      ],
+    },
+    {
+      user: 'Lisa',
+      days: [
+        { day: DayOfWeek.FRIDAY, start: '09:00', end: '21:00' },
+        { day: DayOfWeek.SATURDAY, start: '09:00', end: '21:00' },
+        { day: DayOfWeek.SUNDAY, start: '09:00', end: '21:00' },
+      ],
+    },
+    {
+      user: 'Tom',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '00:00', end: '23:59' },
+        { day: DayOfWeek.TUESDAY, start: '00:00', end: '23:59' },
+        { day: DayOfWeek.WEDNESDAY, start: '00:00', end: '23:59' },
+        { day: DayOfWeek.THURSDAY, start: '00:00', end: '23:59' },
+        { day: DayOfWeek.FRIDAY, start: '00:00', end: '23:59' },
+        { day: DayOfWeek.SATURDAY, start: '00:00', end: '23:59' },
+        { day: DayOfWeek.SUNDAY, start: '00:00', end: '23:59' },
+      ],
+    },
+    {
+      user: 'Emma',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '10:00', end: '18:00' },
+        { day: DayOfWeek.TUESDAY, start: '10:00', end: '18:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '10:00', end: '18:00' },
+      ],
+    },
+    {
+      user: 'Chris',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.TUESDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.THURSDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.FRIDAY, start: '09:00', end: '17:00' },
+      ],
+    },
+    {
+      user: 'Dana',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '06:00', end: '18:00' },
+        { day: DayOfWeek.TUESDAY, start: '06:00', end: '18:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '06:00', end: '18:00' },
+        { day: DayOfWeek.THURSDAY, start: '06:00', end: '18:00' },
+        { day: DayOfWeek.FRIDAY, start: '06:00', end: '18:00' },
+      ],
+    },
+    {
+      user: 'Frank',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '18:00', end: '03:00' },
+        { day: DayOfWeek.TUESDAY, start: '18:00', end: '03:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '18:00', end: '03:00' },
+        { day: DayOfWeek.THURSDAY, start: '18:00', end: '03:00' },
+        { day: DayOfWeek.FRIDAY, start: '18:00', end: '03:00' },
+        { day: DayOfWeek.SATURDAY, start: '18:00', end: '03:00' },
+        { day: DayOfWeek.SUNDAY, start: '18:00', end: '03:00' },
+      ],
+    },
+    {
+      user: 'Grace',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.TUESDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.THURSDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.FRIDAY, start: '09:00', end: '17:00' },
+      ],
+    },
+    {
+      user: 'Henry',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '10:00', end: '22:00' },
+        { day: DayOfWeek.TUESDAY, start: '10:00', end: '22:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '10:00', end: '22:00' },
+        { day: DayOfWeek.THURSDAY, start: '10:00', end: '22:00' },
+        { day: DayOfWeek.FRIDAY, start: '10:00', end: '22:00' },
+        { day: DayOfWeek.SATURDAY, start: '10:00', end: '22:00' },
+        { day: DayOfWeek.SUNDAY, start: '10:00', end: '22:00' },
+      ],
+    },
+    {
+      user: 'Ivy',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.TUESDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.THURSDAY, start: '09:00', end: '17:00' },
+        { day: DayOfWeek.FRIDAY, start: '09:00', end: '17:00' },
+      ],
+    },
+    {
+      user: 'Jake',
+      days: [
+        { day: DayOfWeek.SATURDAY, start: '09:00', end: '21:00' },
+        { day: DayOfWeek.SUNDAY, start: '09:00', end: '21:00' },
+      ],
+    },
+    {
+      user: 'Kate',
+      days: [
+        { day: DayOfWeek.MONDAY, start: '05:00', end: '14:00' },
+        { day: DayOfWeek.TUESDAY, start: '05:00', end: '14:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '05:00', end: '14:00' },
+        { day: DayOfWeek.THURSDAY, start: '05:00', end: '14:00' },
+        { day: DayOfWeek.FRIDAY, start: '05:00', end: '14:00' },
+        { day: DayOfWeek.SATURDAY, start: '05:00', end: '14:00' },
+      ],
+    },
+    {
+      user: 'Leo',
+      days: [
+        { day: DayOfWeek.TUESDAY, start: '16:00', end: '00:00' },
+        { day: DayOfWeek.WEDNESDAY, start: '16:00', end: '00:00' },
+        { day: DayOfWeek.THURSDAY, start: '16:00', end: '00:00' },
+      ],
+    },
   ];
 
   for (const pattern of availabilityPatterns) {
@@ -451,11 +669,33 @@ async function main() {
   const ivy = getStaff('Ivy');
   const today = new Date();
   const exceptions = [
-    { date: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000), isAvailable: false, reason: 'Doctor appointment' },
-    { date: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000), isAvailable: false, reason: 'Family event' },
-    { date: new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000), isAvailable: true, startTime: '12:00', endTime: '20:00', reason: 'Can work afternoon' },
-    { date: new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000), isAvailable: false, reason: 'Vacation day' },
-    { date: new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000), isAvailable: false, reason: 'Personal day' },
+    {
+      date: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000),
+      isAvailable: false,
+      reason: 'Doctor appointment',
+    },
+    {
+      date: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000),
+      isAvailable: false,
+      reason: 'Family event',
+    },
+    {
+      date: new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000),
+      isAvailable: true,
+      startTime: '12:00',
+      endTime: '20:00',
+      reason: 'Can work afternoon',
+    },
+    {
+      date: new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000),
+      isAvailable: false,
+      reason: 'Vacation day',
+    },
+    {
+      date: new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000),
+      isAvailable: false,
+      reason: 'Personal day',
+    },
   ];
 
   for (const exception of exceptions) {

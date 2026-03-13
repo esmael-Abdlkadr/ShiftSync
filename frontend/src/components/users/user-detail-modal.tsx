@@ -13,6 +13,7 @@ import {
 import { AvailabilityGrid } from '@/components/availability/availability-grid';
 import type { UserRole } from '@/types/user';
 import toast from 'react-hot-toast';
+import { SUPPORTED_TIMEZONES } from '@/lib/timezones';
 import {
   X,
   Loader2,
@@ -319,14 +320,18 @@ export function UserDetailModal({ userId, onClose, defaultEditMode = false }: Us
                             <label className="block text-sm font-medium text-slate-700 mb-1">
                               Timezone
                             </label>
-                            <input
-                              type="text"
+                            <select
                               value={formData.timezone}
                               onChange={(e) =>
                                 setFormData({ ...formData, timezone: e.target.value })
                               }
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
-                            />
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
+                            >
+                              <option value="">Select timezone…</option>
+                              {SUPPORTED_TIMEZONES.map((tz) => (
+                                <option key={tz.value} value={tz.value}>{tz.label}</option>
+                              ))}
+                            </select>
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">

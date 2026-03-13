@@ -8,15 +8,7 @@ import toast from 'react-hot-toast';
 import { createUserSchema, type CreateUserFormData } from '@/lib/validations/auth';
 import { useCreateUser } from '@/hooks/api/use-users';
 import { BaseModal } from '@/components/ui/modal';
-
-const TIMEZONES = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Anchorage',
-  'Pacific/Honolulu',
-];
+import { SUPPORTED_TIMEZONES } from '@/lib/timezones';
 
 const ROLES = [
   { value: 'STAFF',   label: 'Staff' },
@@ -131,7 +123,10 @@ export function AddUserModal({ isOpen, onClose }: AddUserModalProps) {
           </Field>
           <Field label="Timezone" required error={errors.timezone?.message}>
             <select {...register('timezone')} className={selectCls(!!errors.timezone)}>
-              {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz.replace('America/', '')}</option>)}
+              <option value="">Select timezone…</option>
+              {SUPPORTED_TIMEZONES.map((tz) => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
             </select>
           </Field>
         </div>

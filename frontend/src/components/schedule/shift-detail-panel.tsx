@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import { toZonedTime } from 'date-fns-tz';
 import {
-  X, Clock, MapPin, Briefcase, Users, Star, Globe, Trash2,
+  X, Clock, MapPin, Briefcase, Users, Star, Globe, Trash2, Pencil,
   CheckCircle, AlertCircle, Loader2, UserMinus,
 } from 'lucide-react';
 import { usePublishShift, useUnpublishShift, useDeleteShift, useShift } from '@/hooks/api/use-shifts';
 import { useRemoveAssignment } from '@/hooks/api/use-assignments';
 import { AssignStaffModal } from './assign-staff-modal';
+import { EditShiftModal } from './edit-shift-modal';
 import { ConfirmDelete } from '@/components/ui/confirmation-modal';
 import toast from 'react-hot-toast';
 import type { Shift } from '@/types/shift';
@@ -26,6 +27,7 @@ function formatDateTime(utcStr: string, tz: string): string {
 
 export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPanelProps) {
   const [showAssign, setShowAssign] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [assignmentToRemove, setAssignmentToRemove] = useState<string | null>(null);
 
   // Always use fresh shift data so headcount/assignments stay in sync after mutations
@@ -186,14 +188,23 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
           </button>
 
           {!isPublished && (
-            <button
-              onClick={() => deleteShift.mutateAsync(shift.id).then(() => { toast.success('Shift deleted'); onClose(); }).catch((e) => toast.error(e?.response?.data?.message ?? 'Failed'))}
-              disabled={deleteShift.isPending}
-              className="w-full py-2 px-4 flex items-center justify-center gap-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete Shift
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowEdit(true)}
+                className="flex-1 py-2 px-4 flex items-center justify-center gap-2 border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </button>
+              <button
+                onClick={() => deleteShift.mutateAsync(shift.id).then(() => { toast.success('Shift deleted'); onClose(); }).catch((e: any) => toast.error(e?.response?.data?.message ?? 'Failed'))}
+                disabled={deleteShift.isPending}
+                className="flex-1 py-2 px-4 flex items-center justify-center gap-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -203,6 +214,14 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
           shift={shift}
           isOpen={showAssign}
           onClose={() => setShowAssign(false)}
+        />
+      )}
+
+      {showEdit && (
+        <EditShiftModal
+          shift={shift}
+          isOpen={showEdit}
+          onClose={() => setShowEdit(false)}
         />
       )}
 
