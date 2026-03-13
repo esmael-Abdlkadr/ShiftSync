@@ -59,10 +59,11 @@ model User {
   firstName          String
   lastName           String
   role               UserRole
-  timezone           String   @default("America/Los_Angeles")
-  desiredWeeklyHours Int?
-  hourlyRate         Decimal? @db.Decimal(10, 2)
-  isActive           Boolean  @default(true)
+  timezone               String   @default("America/Los_Angeles")
+  desiredWeeklyHours     Int?
+  hourlyRate             Decimal? @db.Decimal(10, 2)
+  isActive               Boolean  @default(true)
+  notificationPreference String   @default("IN_APP")
 
   skills                 UserSkill[]
   certifiedLocations     UserLocationCertification[]

@@ -21,7 +21,10 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { AssignSkillDto } from './dto/assign-skill.dto';
 import { CertifyLocationDto } from './dto/certify-location.dto';
-import { SetAvailabilityDto, CreateExceptionDto } from './dto/set-availability.dto';
+import {
+  SetAvailabilityDto,
+  CreateExceptionDto,
+} from './dto/set-availability.dto';
 import { ImportUsersDto } from './dto/import-users.dto';
 
 @Controller('users')
@@ -132,7 +135,12 @@ export class UsersController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateExceptionDto,
   ) {
-    return this.usersService.addAvailabilityException(id, user.sub, user.role, dto);
+    return this.usersService.addAvailabilityException(
+      id,
+      user.sub,
+      user.role,
+      dto,
+    );
   }
 
   @Delete(':id/availability/exceptions/:exceptionId')
@@ -141,7 +149,12 @@ export class UsersController {
     @Param('exceptionId') exceptionId: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.usersService.removeAvailabilityException(id, exceptionId, user.sub, user.role);
+    return this.usersService.removeAvailabilityException(
+      id,
+      exceptionId,
+      user.sub,
+      user.role,
+    );
   }
 
   @Post('import')

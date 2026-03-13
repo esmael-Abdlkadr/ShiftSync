@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConstraintsService } from '../constraints/constraints.service';
+import { EventsService } from '../events/events.service';
 import { Prisma, SwapRequestStatus, UserRole } from '@prisma/client';
 import type { JwtPayload } from '../auth/types/jwt-payload';
 import type { CreateSwapRequestDto } from './dto/create-swap-request.dto';
@@ -40,10 +41,11 @@ export class SwapsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly constraints: ConstraintsService,
+    private readonly events: EventsService,
   ) {}
 
   async findAll(actor: JwtPayload, query: QuerySwapsDto) {
-    const where: any = {};
+    const where: Prisma.SwapRequestWhereInput = {};
 
     if (query.status) where.status = query.status;
 
@@ -146,6 +148,7 @@ export class SwapsService {
       `${swap.initiator.firstName} ${swap.initiator.lastName} wants to swap the shift on ${shift.date.toISOString().split('T')[0]} with you.`,
       { swapId: swap.id, shiftId: shift.id },
     );
+    this.events.emitToUser(dto.targetUserId, 'swap:new', { swapId: swap.id });
 
     return swap;
   }
@@ -180,6 +183,10 @@ export class SwapsService {
         `${swap.target.firstName} ${swap.target.lastName} declined your swap request for the shift on ${swap.shift.date.toISOString().split('T')[0]}.`,
         { swapId },
       );
+      this.events.emitToUser(swap.initiatorId, 'swap:resolved', {
+        swapId,
+        status: 'CANCELLED',
+      });
       return updated;
     }
 
@@ -204,6 +211,10 @@ export class SwapsService {
       `${swap.target.firstName} ${swap.target.lastName} accepted your swap request. Waiting for manager approval.`,
       { swapId },
     );
+    this.events.emitToUser(swap.initiatorId, 'swap:resolved', {
+      swapId,
+      status: 'PENDING_APPROVAL',
+    });
 
     for (const mgr of managers) {
       await this.notifications.notify(
@@ -264,6 +275,14 @@ export class SwapsService {
         `Your swap request for the shift on ${swap.shift.date.toISOString().split('T')[0]} was rejected by the manager.${dto.notes ? ` Reason: ${dto.notes}` : ''}`,
         { swapId },
       );
+      this.events.emitToUser(swap.initiatorId, 'swap:resolved', {
+        swapId,
+        status: 'CANCELLED',
+      });
+      this.events.emitToUser(swap.targetId, 'swap:resolved', {
+        swapId,
+        status: 'CANCELLED',
+      });
       return updated;
     }
 
@@ -309,6 +328,14 @@ export class SwapsService {
       `Your swap for the shift on ${swap.shift.date.toISOString().split('T')[0]} has been approved by the manager.`,
       { swapId },
     );
+    this.events.emitToUser(swap.initiatorId, 'swap:resolved', {
+      swapId,
+      status: 'APPROVED',
+    });
+    this.events.emitToUser(swap.targetId, 'swap:resolved', {
+      swapId,
+      status: 'APPROVED',
+    });
 
     return updated;
   }

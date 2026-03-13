@@ -13,12 +13,14 @@ import { ConstraintsModule } from './constraints/constraints.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SwapsModule } from './swaps/swaps.module';
 import { DropsModule } from './drops/drops.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    EventsModule,
     AuthModule,
     UsersModule,
     SkillsModule,

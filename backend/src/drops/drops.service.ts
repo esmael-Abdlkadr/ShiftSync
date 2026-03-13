@@ -8,6 +8,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConstraintsService } from '../constraints/constraints.service';
+import { EventsService } from '../events/events.service';
 import {
   DropRequestStatus,
   Prisma,
@@ -45,10 +46,11 @@ export class DropsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly constraints: ConstraintsService,
+    private readonly events: EventsService,
   ) {}
 
   async findAll(actor: JwtPayload, query: QueryDropsDto) {
-    const where: any = {};
+    const where: Prisma.DropRequestWhereInput = {};
 
     if (query.status) where.status = query.status;
 
@@ -230,6 +232,7 @@ export class DropsService {
       include: DROP_INCLUDE,
     });
 
+    // Notify managers: approval needed
     const managers = await this.prisma.locationManager.findMany({
       where: { locationId: drop.shift.locationId },
       select: { userId: true },
@@ -243,6 +246,15 @@ export class DropsService {
         { dropId, shiftId: drop.shiftId },
       );
     }
+
+    // Notify the original requestor: their shift was claimed and awaiting approval
+    await this.notifications.notify(
+      drop.requestorId,
+      'DROP_CLAIMED',
+      'Your Dropped Shift Was Claimed',
+      `${updated.claimer!.firstName} ${updated.claimer!.lastName} has claimed your dropped shift on ${drop.shift.date.toISOString().split('T')[0]}. Waiting for manager approval.`,
+      { dropId, shiftId: drop.shiftId },
+    );
 
     return updated;
   }
@@ -288,11 +300,20 @@ export class DropsService {
         include: DROP_INCLUDE,
       });
       if (drop.claimerId) {
+        // Notify claimer: their claim was rejected
         await this.notifications.notify(
           drop.claimerId,
           'DROP_CLAIM_REJECTED',
           'Drop Claim Rejected',
           `Your claim for the shift on ${drop.shift.date.toISOString().split('T')[0]} was rejected by the manager.${dto.notes ? ` Reason: ${dto.notes}` : ''} The shift is still open for others to claim.`,
+          { dropId },
+        );
+        // Notify requestor: their drop is back to OPEN
+        await this.notifications.notify(
+          drop.requestorId,
+          'DROP_CLAIM_REJECTED',
+          'Drop Claim Was Rejected — Still Open',
+          `The manager rejected ${drop.claimer!.firstName} ${drop.claimer!.lastName}'s claim for your dropped shift on ${drop.shift.date.toISOString().split('T')[0]}. Your drop request is still open.${dto.notes ? ` Manager note: ${dto.notes}` : ''}`,
           { dropId },
         );
       }
@@ -335,6 +356,16 @@ export class DropsService {
       `The shift drop for ${drop.shift.date.toISOString().split('T')[0]} has been approved. ${updated.claimer!.firstName} ${updated.claimer!.lastName} is now assigned to the shift.`,
       { dropId },
     );
+    this.events.emitToUser(drop.requestorId, 'drop:resolved', {
+      dropId,
+      status: 'APPROVED',
+    });
+    if (drop.claimerId) {
+      this.events.emitToUser(drop.claimerId, 'drop:resolved', {
+        dropId,
+        status: 'APPROVED',
+      });
+    }
 
     return updated;
   }

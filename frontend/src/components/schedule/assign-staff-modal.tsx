@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { BaseModal } from '@/components/ui/modal';
 import { useEligibleStaff, useAssignStaff } from '@/hooks/api/use-assignments';
+import { useSocketEvent } from '@/hooks/use-socket';
+import { useQueryClient } from '@tanstack/react-query';
+import { shiftKeys } from '@/hooks/api/use-shifts';
 import {
   UserPlus, AlertTriangle, AlertCircle, Loader2, CheckCircle2,
 } from 'lucide-react';
@@ -38,13 +41,30 @@ function HoursBar({ hours, projected }: { hours: number; projected: number }) {
 }
 
 export function AssignStaffModal({ shift, isOpen, onClose }: AssignStaffModalProps) {
+  const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds]       = useState<Set<string>>(new Set());
   const [overrideReason, setOverrideReason] = useState<OverrideReason | ''>('');
   const [overrideNotes, setOverrideNotes]   = useState('');
   const [isAssigning, setIsAssigning]       = useState(false);
 
-  const { data: eligible, isLoading } = useEligibleStaff(isOpen ? shift.id : '');
+  const { data: eligible, isLoading, refetch: refetchEligible } = useEligibleStaff(isOpen ? shift.id : '');
   const assignStaff = useAssignStaff();
+
+  // Real-time: refresh eligible list when another manager assigns someone
+  useSocketEvent<{ shiftId: string }>('assignment:created', (data) => {
+    if (data.shiftId === shift.id) {
+      refetchEligible();
+      queryClient.invalidateQueries({ queryKey: shiftKeys.all });
+    }
+  });
+
+  // Real-time: conflict — another manager beat us to this staff member
+  useSocketEvent<{ shiftId: string; message: string }>('assignment:conflict', (data) => {
+    if (data.shiftId === shift.id) {
+      toast.error(data.message ?? 'A staff member was just assigned by another manager. Please refresh and try again.');
+      refetchEligible();
+    }
+  });
 
   const remaining = shift.headcount - shift.assignments.length;
 

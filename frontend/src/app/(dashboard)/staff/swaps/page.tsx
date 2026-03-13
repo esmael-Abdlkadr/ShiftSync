@@ -10,6 +10,10 @@ import { DropRequestModal } from '@/components/swaps/drop-request-modal';
 import { useShifts } from '@/hooks/api/use-shifts';
 import { useSwaps, useCancelSwap, useRespondToSwap } from '@/hooks/api/use-swaps';
 import { useDrops, useOpenDrops, useCancelDrop, useClaimDrop } from '@/hooks/api/use-drops';
+import { useSocketEvent } from '@/hooks/use-socket';
+import { useQueryClient } from '@tanstack/react-query';
+import { swapKeys } from '@/hooks/api/use-swaps';
+import { dropKeys } from '@/hooks/api/use-drops';
 import toast from 'react-hot-toast';
 import type { Shift } from '@/types/shift';
 
@@ -40,6 +44,7 @@ function formatTime(utcStr: string, tz: string): string {
 export default function StaffSwapsPage() {
   const { data: session } = useSession();
   const userId = (session?.user as any)?.id ?? '';
+  const queryClient = useQueryClient();
 
   const [tab, setTab] = useState<Tab>('my-shifts');
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
@@ -55,6 +60,20 @@ export default function StaffSwapsPage() {
   const respondSwap = useRespondToSwap();
   const cancelDrop  = useCancelDrop();
   const claimDrop   = useClaimDrop();
+
+  useSocketEvent('swap:new', () => {
+    queryClient.invalidateQueries({ queryKey: swapKeys.all });
+    toast('You have a new swap request', { icon: '🔄' });
+  });
+  useSocketEvent<{ status: string }>('swap:resolved', (data) => {
+    queryClient.invalidateQueries({ queryKey: swapKeys.all });
+    if (data.status === 'APPROVED') toast.success('Swap request approved!');
+    else if (data.status === 'CANCELLED') toast('Swap request was declined or cancelled', { icon: '❌' });
+  });
+  useSocketEvent<{ status: string }>('drop:resolved', (data) => {
+    queryClient.invalidateQueries({ queryKey: dropKeys.all });
+    if (data.status === 'APPROVED') toast.success('Drop request approved!');
+  });
 
   const myShifts = (shifts ?? []).filter((s) =>
     s.assignments.some((a) => a.user.id === userId),

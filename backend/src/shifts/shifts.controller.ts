@@ -32,6 +32,12 @@ export class ShiftsController {
     return this.shiftsService.findAll(user, query);
   }
 
+  @Get('on-duty')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  getOnDuty() {
+    return this.shiftsService.getOnDuty();
+  }
+
   @Post()
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateShiftDto) {

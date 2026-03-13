@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { OvertimeWidget } from '@/components/schedule/overtime-widget';
+import { OnDutyWidget } from '@/components/dashboard/on-duty-widget';
 import { useLocations } from '@/hooks/api/use-locations';
 import { Users, MapPin, Calendar, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
@@ -87,7 +88,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Recent Activity</h3>
             <div className="text-sm text-slate-500 text-center py-8">No recent activity</div>
@@ -96,6 +97,8 @@ export default function AdminDashboard() {
           {firstLocationId && (
             <OvertimeWidget locationId={firstLocationId} weekStart={weekStart} />
           )}
+
+          <OnDutyWidget />
         </div>
       </div>
     </DashboardLayout>

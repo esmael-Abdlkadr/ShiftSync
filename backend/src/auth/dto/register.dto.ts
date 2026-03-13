@@ -1,4 +1,15 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsEnum, IsOptional, IsInt, IsNumber, Min, Max } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  MaxLength,
+  IsEnum,
+  IsOptional,
+  IsInt,
+  IsNumber,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { UserRole } from '@prisma/client';
 

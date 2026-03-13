@@ -12,7 +12,7 @@ export class LocationsService {
         orderBy: { name: 'asc' },
         include: {
           _count: {
-            select: { 
+            select: {
               managers: true,
               certifiedStaff: true,
               shifts: true,
@@ -32,7 +32,7 @@ export class LocationsService {
         orderBy: { name: 'asc' },
         include: {
           _count: {
-            select: { 
+            select: {
               managers: true,
               certifiedStaff: true,
               shifts: true,
@@ -45,7 +45,7 @@ export class LocationsService {
     return this.prisma.location.findMany({
       where: {
         certifiedStaff: {
-          some: { 
+          some: {
             userId,
             decertifiedAt: null,
           },

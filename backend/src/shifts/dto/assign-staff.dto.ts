@@ -9,7 +9,7 @@ export class AssignStaffDto {
   @IsOptional()
   overrideReason?: OverrideReason;
 
-  @ValidateIf((o) => !!o.overrideReason)
+  @ValidateIf((o: AssignStaffDto) => !!o.overrideReason)
   @IsString()
   overrideNotes?: string;
 }

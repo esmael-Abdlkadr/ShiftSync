@@ -15,6 +15,7 @@ import {
   CalendarDays,
   BarChart3,
 } from 'lucide-react';
+import { NotificationBell } from './notification-bell';
 
 interface NavItem {
   label: string;
@@ -28,7 +29,8 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Schedule', href: '/admin/schedule', icon: Calendar },
   { label: 'Locations', href: '/admin/locations', icon: MapPin },
   { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
-  { label: 'Settings', href: '/admin/settings', icon: Settings },
+  { label: 'Notifications', href: '/notifications', icon: Bell },
+  { label: 'Settings', href: '/settings', icon: Settings },
 ];
 
 const MANAGER_NAV: NavItem[] = [
@@ -36,6 +38,8 @@ const MANAGER_NAV: NavItem[] = [
   { label: 'Staff', href: '/manager/staff', icon: Users },
   { label: 'Schedule', href: '/manager/schedule', icon: Calendar },
   { label: 'Requests', href: '/manager/requests', icon: Clock },
+  { label: 'Notifications', href: '/notifications', icon: Bell },
+  { label: 'Settings', href: '/settings', icon: Settings },
 ];
 
 const STAFF_NAV: NavItem[] = [
@@ -43,6 +47,8 @@ const STAFF_NAV: NavItem[] = [
   { label: 'My Schedule', href: '/staff/schedule', icon: Calendar },
   { label: 'Availability', href: '/staff/availability', icon: Clock },
   { label: 'Swap Requests', href: '/staff/swaps', icon: Bell },
+  { label: 'Notifications', href: '/notifications', icon: Bell },
+  { label: 'Settings', href: '/settings', icon: Settings },
 ];
 
 export function Sidebar() {
@@ -70,6 +76,7 @@ export function Sidebar() {
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
+          const isNotifications = item.label === 'Notifications';
           return (
             <Link
               key={item.href}
@@ -80,7 +87,13 @@ export function Sidebar() {
                   : 'text-slate-300 hover:bg-white/5 hover:text-white'
               }`}
             >
-              <item.icon className="h-5 w-5" />
+              <span className="h-5 w-5 flex items-center justify-center">
+                {isNotifications ? (
+                  <NotificationBell />
+                ) : (
+                  <item.icon className="h-5 w-5" />
+                )}
+              </span>
               {item.label}
             </Link>
           );

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSkillDto } from './dto/create-skill.dto';
 
@@ -69,7 +73,7 @@ export class SkillsService {
 
     if (skill._count.users > 0) {
       throw new ConflictException(
-        `Cannot delete skill "${skill.name}" because ${skill._count.users} user(s) have this skill assigned`
+        `Cannot delete skill "${skill.name}" because ${skill._count.users} user(s) have this skill assigned`,
       );
     }
 

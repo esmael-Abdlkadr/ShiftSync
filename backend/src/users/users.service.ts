@@ -6,12 +6,16 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
-import { SetAvailabilityDto, CreateExceptionDto } from './dto/set-availability.dto';
+import {
+  SetAvailabilityDto,
+  CreateExceptionDto,
+} from './dto/set-availability.dto';
 import type { ImportUserRowDto } from './dto/import-users.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface ImportRowResult {
   row: number;
@@ -21,13 +25,20 @@ export interface ImportRowResult {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
-  async findAll(currentUserId: string, currentUserRole: UserRole, query: QueryUsersDto) {
+  async findAll(
+    currentUserId: string,
+    currentUserRole: UserRole,
+    query: QueryUsersDto,
+  ) {
     const { search, role, locationId, skillId, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.UserWhereInput = {};
 
     if (search) {
       where.OR = [
@@ -43,17 +54,12 @@ export class UsersService {
 
     if (locationId) {
       where.certifiedLocations = {
-        some: {
-          locationId,
-          decertifiedAt: null,
-        },
+        some: { locationId, decertifiedAt: null },
       };
     }
 
     if (skillId) {
-      where.skills = {
-        some: { skillId },
-      };
+      where.skills = { some: { skillId } };
     }
 
     if (currentUserRole === UserRole.MANAGER) {
@@ -61,14 +67,12 @@ export class UsersService {
         where: { userId: currentUserId },
         select: { locationId: true },
       });
-      const managedLocationIds = managedLocations.map(l => l.locationId);
+      const managedLocationIds = managedLocations.map((l) => l.locationId);
 
       where.OR = [
         {
           certifiedLocations: {
-            some: {
-              locationId: { in: managedLocationIds },
-            },
+            some: { locationId: { in: managedLocationIds } },
           },
         },
         { id: currentUserId },
@@ -128,6 +132,7 @@ export class UsersService {
         desiredWeeklyHours: true,
         hourlyRate: true,
         isActive: true,
+        notificationPreference: true,
         createdAt: true,
         updatedAt: true,
         skills: {
@@ -155,7 +160,12 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, currentUserId: string, currentUserRole: UserRole, dto: UpdateUserDto) {
+  async update(
+    id: string,
+    currentUserId: string,
+    currentUserRole: UserRole,
+    dto: UpdateUserDto,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id } });
 
     if (!user) {
@@ -183,6 +193,7 @@ export class UsersService {
         desiredWeeklyHours: true,
         hourlyRate: true,
         isActive: true,
+        notificationPreference: true,
       },
     });
   }
@@ -264,7 +275,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    const where: any = { userId };
+    const where: Prisma.UserLocationCertificationWhereInput = { userId };
     if (!includeDecertified) {
       where.decertifiedAt = null;
     }
@@ -293,7 +304,9 @@ export class UsersService {
     });
 
     if (existing && !existing.decertifiedAt) {
-      throw new ConflictException(`User is already certified for this location`);
+      throw new ConflictException(
+        `User is already certified for this location`,
+      );
     }
 
     if (existing) {
@@ -311,16 +324,19 @@ export class UsersService {
   }
 
   async decertifyLocation(userId: string, locationId: string) {
-    const certification = await this.prisma.userLocationCertification.findUnique({
-      where: { userId_locationId: { userId, locationId } },
-    });
+    const certification =
+      await this.prisma.userLocationCertification.findUnique({
+        where: { userId_locationId: { userId, locationId } },
+      });
 
     if (!certification) {
       throw new NotFoundException(`User is not certified for this location`);
     }
 
     if (certification.decertifiedAt) {
-      throw new ConflictException(`User is already decertified from this location`);
+      throw new ConflictException(
+        `User is already decertified from this location`,
+      );
     }
 
     return this.prisma.userLocationCertification.update({
@@ -331,16 +347,21 @@ export class UsersService {
   }
 
   async recertifyLocation(userId: string, locationId: string) {
-    const certification = await this.prisma.userLocationCertification.findUnique({
-      where: { userId_locationId: { userId, locationId } },
-    });
+    const certification =
+      await this.prisma.userLocationCertification.findUnique({
+        where: { userId_locationId: { userId, locationId } },
+      });
 
     if (!certification) {
-      throw new NotFoundException(`User has never been certified for this location`);
+      throw new NotFoundException(
+        `User has never been certified for this location`,
+      );
     }
 
     if (!certification.decertifiedAt) {
-      throw new ConflictException(`User is already certified for this location`);
+      throw new ConflictException(
+        `User is already certified for this location`,
+      );
     }
 
     return this.prisma.userLocationCertification.update({
@@ -362,20 +383,29 @@ export class UsersService {
     });
   }
 
-  async setAvailability(userId: string, currentUserId: string, currentUserRole: UserRole, dto: SetAvailabilityDto) {
+  async setAvailability(
+    userId: string,
+    currentUserId: string,
+    currentUserRole: UserRole,
+    dto: SetAvailabilityDto,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     if (currentUserRole === UserRole.STAFF && currentUserId !== userId) {
-      throw new ForbiddenException('Staff can only update their own availability');
+      throw new ForbiddenException(
+        'Staff can only update their own availability',
+      );
     }
 
     const daysSeen = new Set<string>();
     for (const slot of dto.availability) {
       if (daysSeen.has(slot.dayOfWeek)) {
-        throw new BadRequestException(`Duplicate availability for ${slot.dayOfWeek}`);
+        throw new BadRequestException(
+          `Duplicate availability for ${slot.dayOfWeek}`,
+        );
       }
       daysSeen.add(slot.dayOfWeek);
     }
@@ -385,7 +415,7 @@ export class UsersService {
 
       if (dto.availability.length > 0) {
         await tx.availability.createMany({
-          data: dto.availability.map(slot => ({
+          data: dto.availability.map((slot) => ({
             userId,
             dayOfWeek: slot.dayOfWeek,
             startTime: slot.startTime,
@@ -394,6 +424,13 @@ export class UsersService {
         });
       }
     });
+
+    // Notify managers at all locations this staff member is certified for
+    await this.notifyManagersOfAvailabilityChange(
+      userId,
+      user.firstName,
+      user.lastName,
+    );
 
     return this.getAvailability(userId);
   }
@@ -413,18 +450,27 @@ export class UsersService {
     });
   }
 
-  async addAvailabilityException(userId: string, currentUserId: string, currentUserRole: UserRole, dto: CreateExceptionDto) {
+  async addAvailabilityException(
+    userId: string,
+    currentUserId: string,
+    currentUserRole: UserRole,
+    dto: CreateExceptionDto,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     if (currentUserRole === UserRole.STAFF && currentUserId !== userId) {
-      throw new ForbiddenException('Staff can only update their own availability');
+      throw new ForbiddenException(
+        'Staff can only update their own availability',
+      );
     }
 
     if (dto.isAvailable && (!dto.startTime || !dto.endTime)) {
-      throw new BadRequestException('Start time and end time are required when marking as available');
+      throw new BadRequestException(
+        'Start time and end time are required when marking as available',
+      );
     }
 
     const date = new Date(dto.date);
@@ -434,31 +480,47 @@ export class UsersService {
       where: { userId_date: { userId, date } },
     });
 
-    if (existing) {
-      return this.prisma.availabilityException.update({
-        where: { userId_date: { userId, date } },
-        data: {
-          isAvailable: dto.isAvailable,
-          startTime: dto.isAvailable ? dto.startTime : null,
-          endTime: dto.isAvailable ? dto.endTime : null,
-          reason: dto.reason,
-        },
-      });
-    }
+    const dateStr = date.toISOString().split('T')[0];
+    const availability = dto.isAvailable ? 'available' : 'unavailable';
 
-    return this.prisma.availabilityException.create({
-      data: {
-        userId,
-        date,
-        isAvailable: dto.isAvailable,
-        startTime: dto.isAvailable ? dto.startTime : null,
-        endTime: dto.isAvailable ? dto.endTime : null,
-        reason: dto.reason,
-      },
-    });
+    const exception = existing
+      ? await this.prisma.availabilityException.update({
+          where: { userId_date: { userId, date } },
+          data: {
+            isAvailable: dto.isAvailable,
+            startTime: dto.isAvailable ? dto.startTime : null,
+            endTime: dto.isAvailable ? dto.endTime : null,
+            reason: dto.reason,
+          },
+        })
+      : await this.prisma.availabilityException.create({
+          data: {
+            userId,
+            date,
+            isAvailable: dto.isAvailable,
+            startTime: dto.isAvailable ? dto.startTime : null,
+            endTime: dto.isAvailable ? dto.endTime : null,
+            reason: dto.reason,
+          },
+        });
+
+    // Notify managers: staff marked themselves unavailable/available for a specific date
+    await this.notifyManagersOfAvailabilityChange(
+      userId,
+      user.firstName,
+      user.lastName,
+      `${user.firstName} ${user.lastName} has marked themselves ${availability} on ${dateStr}.${dto.reason ? ` Reason: ${dto.reason}` : ''}`,
+    );
+
+    return exception;
   }
 
-  async removeAvailabilityException(userId: string, exceptionId: string, currentUserId: string, currentUserRole: UserRole) {
+  async removeAvailabilityException(
+    userId: string,
+    exceptionId: string,
+    currentUserId: string,
+    currentUserRole: UserRole,
+  ) {
     const exception = await this.prisma.availabilityException.findUnique({
       where: { id: exceptionId },
     });
@@ -472,7 +534,9 @@ export class UsersService {
     }
 
     if (currentUserRole === UserRole.STAFF && currentUserId !== userId) {
-      throw new ForbiddenException('Staff can only update their own availability');
+      throw new ForbiddenException(
+        'Staff can only update their own availability',
+      );
     }
 
     await this.prisma.availabilityException.delete({
@@ -511,8 +575,12 @@ export class UsersService {
               lastName: row.lastName,
               role: row.role,
               timezone: row.timezone ?? existing.timezone,
-              desiredWeeklyHours: row.desiredWeeklyHours ?? existing.desiredWeeklyHours,
-              hourlyRate: row.hourlyRate !== undefined ? row.hourlyRate : existing.hourlyRate,
+              desiredWeeklyHours:
+                row.desiredWeeklyHours ?? existing.desiredWeeklyHours,
+              hourlyRate:
+                row.hourlyRate !== undefined
+                  ? row.hourlyRate
+                  : existing.hourlyRate,
               isActive: true,
             },
           });
@@ -540,5 +608,38 @@ export class UsersService {
     }
 
     return { succeeded, failed: errors.length, errors };
+  }
+
+  private async notifyManagersOfAvailabilityChange(
+    userId: string,
+    firstName: string,
+    lastName: string,
+    customMessage?: string,
+  ): Promise<void> {
+    const certs = await this.prisma.userLocationCertification.findMany({
+      where: { userId, decertifiedAt: null },
+      select: { locationId: true },
+    });
+    const locationIds = certs.map((c) => c.locationId);
+    if (locationIds.length === 0) return;
+
+    const managers = await this.prisma.locationManager.findMany({
+      where: { locationId: { in: locationIds }, userId: { not: userId } },
+      select: { userId: true },
+    });
+    const managerIds = [...new Set(managers.map((m) => m.userId))];
+    if (managerIds.length === 0) return;
+
+    const message =
+      customMessage ??
+      `${firstName} ${lastName} has updated their weekly availability. You may want to review upcoming schedules.`;
+
+    await this.notifications.notifyMany(
+      managerIds,
+      'AVAILABILITY_CHANGED',
+      'Staff Availability Updated',
+      message,
+      { userId },
+    );
   }
 }

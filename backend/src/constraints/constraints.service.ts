@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
-import { startOfDay, endOfDay, addHours, differenceInMinutes, subDays } from 'date-fns';
+import { startOfDay, endOfDay, differenceInMinutes, subDays } from 'date-fns';
 import type {
   ConstraintCheckParams,
   ConstraintResult,
@@ -44,14 +44,25 @@ export class ConstraintsService {
     ]);
 
     if (!user) {
-      violations.push({ rule: 'USER_NOT_FOUND', message: 'User not found.', severity: 'block' });
-      return { ok: false, violations, suggestions: [], requiresOverride: false };
+      violations.push({
+        rule: 'USER_NOT_FOUND',
+        message: 'User not found.',
+        severity: 'block',
+      });
+      return {
+        ok: false,
+        violations,
+        suggestions: [],
+        requiresOverride: false,
+      };
     }
 
     // Check 1 — Skill
     const hasSkill = user.skills.some((s) => s.skillId === requiredSkillId);
     if (!hasSkill) {
-      const skill = await this.prisma.skill.findUnique({ where: { id: requiredSkillId } });
+      const skill = await this.prisma.skill.findUnique({
+        where: { id: requiredSkillId },
+      });
       violations.push({
         rule: 'SKILL_MISMATCH',
         message: `${user.firstName} ${user.lastName} does not have the required skill "${skill?.name ?? requiredSkillId}".`,
@@ -60,9 +71,13 @@ export class ConstraintsService {
     }
 
     // Check 2 — Location certification
-    const hasCert = user.certifiedLocations.some((c) => c.locationId === locationId);
+    const hasCert = user.certifiedLocations.some(
+      (c) => c.locationId === locationId,
+    );
     if (!hasCert) {
-      const location = await this.prisma.location.findUnique({ where: { id: locationId } });
+      const location = await this.prisma.location.findUnique({
+        where: { id: locationId },
+      });
       violations.push({
         rule: 'NO_LOCATION_CERT',
         message: `${user.firstName} ${user.lastName} is not certified to work at "${location?.name ?? locationId}".`,
@@ -93,8 +108,10 @@ export class ConstraintsService {
       const s = a.shift;
       const prevEndToNewStart = shiftStartMs - s.endTime.getTime();
       const newEndToPrevStart = s.startTime.getTime() - shiftEndMs;
-      return prevEndToNewStart >= 0 && prevEndToNewStart < tenHoursMs
-        || newEndToPrevStart >= 0 && newEndToPrevStart < tenHoursMs;
+      return (
+        (prevEndToNewStart >= 0 && prevEndToNewStart < tenHoursMs) ||
+        (newEndToPrevStart >= 0 && newEndToPrevStart < tenHoursMs)
+      );
     });
     if (restViolation) {
       violations.push({
@@ -108,7 +125,15 @@ export class ConstraintsService {
     const shiftStartInUserTz = toZonedTime(shiftStart, user.timezone);
     const shiftEndInUserTz = toZonedTime(shiftEnd, user.timezone);
 
-    const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const dayNames = [
+      'SUNDAY',
+      'MONDAY',
+      'TUESDAY',
+      'WEDNESDAY',
+      'THURSDAY',
+      'FRIDAY',
+      'SATURDAY',
+    ];
     const shiftDayOfWeek = dayNames[shiftStartInUserTz.getDay()];
     const shiftDateStr = shiftStartInUserTz.toISOString().split('T')[0];
 
@@ -130,8 +155,10 @@ export class ConstraintsService {
       } else if (exception.startTime && exception.endTime) {
         const [exStartH, exStartM] = exception.startTime.split(':').map(Number);
         const [exEndH, exEndM] = exception.endTime.split(':').map(Number);
-        const shiftStartMin = shiftStartInUserTz.getHours() * 60 + shiftStartInUserTz.getMinutes();
-        const shiftEndMin = shiftEndInUserTz.getHours() * 60 + shiftEndInUserTz.getMinutes();
+        const shiftStartMin =
+          shiftStartInUserTz.getHours() * 60 + shiftStartInUserTz.getMinutes();
+        const shiftEndMin =
+          shiftEndInUserTz.getHours() * 60 + shiftEndInUserTz.getMinutes();
         const exStartMin = exStartH * 60 + exStartM;
         const exEndMin = exEndH * 60 + exEndM;
         if (shiftStartMin < exStartMin || shiftEndMin > exEndMin) {
@@ -144,7 +171,9 @@ export class ConstraintsService {
         }
       }
     } else {
-      const recurringAvail = user.availability.find((a) => a.dayOfWeek === shiftDayOfWeek);
+      const recurringAvail = user.availability.find(
+        (a) => a.dayOfWeek === shiftDayOfWeek,
+      );
       if (!recurringAvail) {
         availabilityBlocked = true;
         violations.push({
@@ -153,10 +182,14 @@ export class ConstraintsService {
           severity: 'block',
         });
       } else {
-        const [avStartH, avStartM] = recurringAvail.startTime.split(':').map(Number);
+        const [avStartH, avStartM] = recurringAvail.startTime
+          .split(':')
+          .map(Number);
         const [avEndH, avEndM] = recurringAvail.endTime.split(':').map(Number);
-        const shiftStartMin = shiftStartInUserTz.getHours() * 60 + shiftStartInUserTz.getMinutes();
-        const shiftEndMin = shiftEndInUserTz.getHours() * 60 + shiftEndInUserTz.getMinutes();
+        const shiftStartMin =
+          shiftStartInUserTz.getHours() * 60 + shiftStartInUserTz.getMinutes();
+        const shiftEndMin =
+          shiftEndInUserTz.getHours() * 60 + shiftEndInUserTz.getMinutes();
         const avStartMin = avStartH * 60 + avStartM;
         const avEndMin = avEndH * 60 + avEndM;
         if (shiftStartMin < avStartMin || shiftEndMin > avEndMin) {
@@ -178,7 +211,9 @@ export class ConstraintsService {
       const dayEndUtc = fromZonedTime(dayEnd, locationTimezone);
 
       const sameDayAssignments = existingAssignments.filter((a) => {
-        return a.shift.startTime >= dayStartUtc && a.shift.startTime <= dayEndUtc;
+        return (
+          a.shift.startTime >= dayStartUtc && a.shift.startTime <= dayEndUtc
+        );
       });
 
       const existingDailyMinutes = sameDayAssignments.reduce((sum, a) => {
@@ -213,7 +248,8 @@ export class ConstraintsService {
     const existingWeeklyMinutes = weeklyAssignments.reduce((sum, a) => {
       return sum + differenceInMinutes(a.shift.endTime, a.shift.startTime);
     }, 0);
-    const projectedWeeklyHours = (existingWeeklyMinutes + differenceInMinutes(shiftEnd, shiftStart)) / 60;
+    const projectedWeeklyHours =
+      (existingWeeklyMinutes + differenceInMinutes(shiftEnd, shiftStart)) / 60;
 
     if (projectedWeeklyHours >= 40) {
       violations.push({
@@ -230,7 +266,11 @@ export class ConstraintsService {
     }
 
     // Check 10, 11 — Consecutive days
-    const consecutiveDays = await this.countConsecutiveDays(userId, shiftDate, locationTimezone);
+    const consecutiveDays = await this.countConsecutiveDays(
+      userId,
+      shiftDate,
+      locationTimezone,
+    );
 
     if (consecutiveDays >= 6) {
       if (consecutiveDays >= 6 && !overrideReason) {
@@ -255,7 +295,9 @@ export class ConstraintsService {
     }
 
     const hardBlocks = violations.filter((v) => v.severity === 'block');
-    const requiresOverride = violations.some((v) => v.severity === 'override_required');
+    const requiresOverride = violations.some(
+      (v) => v.severity === 'override_required',
+    );
     const ok = hardBlocks.length === 0 && !requiresOverride;
 
     let suggestions: Suggestion[] = [];
@@ -320,7 +362,7 @@ export class ConstraintsService {
 
     const shiftDayZoned = toZonedTime(shiftDate, locationTimezone);
     let consecutive = 0;
-    let checkDay = new Date(shiftDayZoned);
+    const checkDay = new Date(shiftDayZoned);
     checkDay.setDate(checkDay.getDate() - 1);
 
     for (let i = 0; i < 7; i++) {
@@ -345,8 +387,15 @@ export class ConstraintsService {
     weekStart: Date;
     weekEnd: Date;
   }): Promise<Suggestion[]> {
-    const { shiftStart, shiftEnd, locationId, requiredSkillId, excludeUserId, weekStart, weekEnd } =
-      params;
+    const {
+      shiftStart,
+      shiftEnd,
+      locationId,
+      requiredSkillId,
+      excludeUserId,
+      weekStart,
+      weekEnd,
+    } = params;
 
     const candidates = await this.prisma.user.findMany({
       where: {
@@ -391,7 +440,11 @@ export class ConstraintsService {
     return available.sort((a, b) => a.weeklyHours - b.weeklyHours);
   }
 
-  async getProjectedWeeklyHours(userId: string, shiftDate: Date, locationTimezone: string): Promise<number> {
+  async getProjectedWeeklyHours(
+    userId: string,
+    shiftDate: Date,
+    locationTimezone: string,
+  ): Promise<number> {
     const weekStart = this.getWeekStart(shiftDate, locationTimezone);
     const weekEnd = this.getWeekEnd(shiftDate, locationTimezone);
 

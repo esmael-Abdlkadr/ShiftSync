@@ -7,9 +7,15 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ConstraintsService } from '../constraints/constraints.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { UserRole, ShiftStatus, SwapRequestStatus } from '@prisma/client';
+import { EventsService } from '../events/events.service';
+import {
+  Prisma,
+  UserRole,
+  ShiftStatus,
+  SwapRequestStatus,
+} from '@prisma/client';
 import { differenceInMinutes } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import type { CreateShiftDto } from './dto/create-shift.dto';
 import type { UpdateShiftDto } from './dto/update-shift.dto';
 import type { AssignStaffDto } from './dto/assign-staff.dto';
@@ -22,12 +28,13 @@ export class ShiftsService {
     private readonly prisma: PrismaService,
     private readonly constraints: ConstraintsService,
     private readonly notifications: NotificationsService,
+    private readonly events: EventsService,
   ) {}
 
   async findAll(actor: JwtPayload, query: QueryShiftsDto) {
     const { locationId, weekStart, status, skillId } = query;
 
-    const where: any = {};
+    const where: Prisma.ShiftWhereInput = {};
 
     if (actor.role === UserRole.MANAGER) {
       const managed = await this.prisma.locationManager.findMany({
@@ -144,21 +151,29 @@ export class ShiftsService {
     this.assertEditAllowed(shift);
 
     const before = { ...shift };
+    const patch: Partial<{
+      locationId: string;
+      skillId: string;
+      date: Date;
+      startTime: Date;
+      endTime: Date;
+      headcount: number;
+      isPremium: boolean;
+      editCutoffHours: number;
+    }> = {};
+    if (dto.locationId) patch.locationId = dto.locationId;
+    if (dto.skillId) patch.skillId = dto.skillId;
+    if (dto.date) patch.date = new Date(dto.date);
+    if (dto.startTime) patch.startTime = new Date(dto.startTime);
+    if (dto.endTime) patch.endTime = new Date(dto.endTime);
+    if (dto.headcount !== undefined) patch.headcount = dto.headcount;
+    if (dto.isPremium !== undefined) patch.isPremium = dto.isPremium;
+    if (dto.editCutoffHours !== undefined)
+      patch.editCutoffHours = dto.editCutoffHours;
+
     const updated = await this.prisma.shift.update({
       where: { id },
-      data: {
-        ...(dto.locationId && { locationId: dto.locationId }),
-        ...(dto.skillId && { skillId: dto.skillId }),
-        ...(dto.date && { date: new Date(dto.date) }),
-        ...(dto.startTime && { startTime: new Date(dto.startTime) }),
-        ...(dto.endTime && { endTime: new Date(dto.endTime) }),
-        ...(dto.headcount !== undefined && { headcount: dto.headcount }),
-        ...(dto.isPremium !== undefined && { isPremium: dto.isPremium }),
-        ...(dto.editCutoffHours !== undefined && {
-          editCutoffHours: dto.editCutoffHours,
-        }),
-        version: { increment: 1 },
-      },
+      data: { ...patch, version: { increment: 1 } },
       include: {
         location: { select: { id: true, name: true, timezone: true } },
         requiredSkill: { select: { id: true, name: true } },
@@ -180,6 +195,26 @@ export class ShiftsService {
       updated,
     );
     await this.cancelPendingSwapsForShift(id, shift.date);
+
+    // Notify assigned staff that their shift details have changed
+    if (shift.status === ShiftStatus.PUBLISHED) {
+      const assignedUserIds = updated.assignments.map((a) => a.user.id);
+      if (assignedUserIds.length > 0) {
+        const shiftDateStr = updated.date.toISOString().split('T')[0];
+        await this.notifications.notifyMany(
+          assignedUserIds,
+          'SHIFT_CHANGED',
+          'Your Shift Has Been Modified',
+          `Your ${updated.requiredSkill.name} shift at ${updated.location.name} on ${shiftDateStr} has been updated by a manager. Please review the new details.`,
+          { shiftId: id, locationId: updated.locationId },
+        );
+      }
+    }
+
+    this.events.emitToLocation(updated.locationId, 'shift:updated', {
+      shiftId: id,
+      locationId: updated.locationId,
+    });
     return updated;
   }
 
@@ -264,6 +299,34 @@ export class ShiftsService {
       { status: shift.status },
       { status: updated.status },
     );
+
+    // Notify each assigned staff member — persist + real-time
+    const assignments = await this.prisma.shiftAssignment.findMany({
+      where: { shiftId: id },
+      select: { userId: true },
+    });
+    const assignedUserIds = assignments.map((a) => a.userId);
+    if (assignedUserIds.length > 0) {
+      const shiftDateStr = shift.date.toISOString().split('T')[0];
+      await this.notifications.notifyMany(
+        assignedUserIds,
+        'SHIFT_PUBLISHED',
+        'Your Schedule Has Been Published',
+        `Your ${shift.requiredSkill.name} shift at ${shift.location.name} on ${shiftDateStr} has been published and is now confirmed.`,
+        { shiftId: id, locationId: shift.locationId },
+      );
+    }
+    for (const { userId } of assignments) {
+      this.events.emitToUser(userId, 'shift:published', {
+        shiftId: id,
+        locationId: shift.locationId,
+      });
+    }
+    this.events.emitToLocation(shift.locationId, 'shift:published', {
+      shiftId: id,
+      locationId: shift.locationId,
+    });
+
     return updated;
   }
 
@@ -373,9 +436,48 @@ export class ShiftsService {
         },
       );
 
+      // Broadcast to location so other open modals refresh their eligible staff list
+      this.events.emitToLocation(shift.locationId, 'assignment:created', {
+        shiftId,
+        locationId: shift.locationId,
+        userId: dto.userId,
+        assignedById: actor.sub,
+      });
+
+      // Persist notification for the assigned staff member
+      const shiftDateStr = shift.date.toISOString().split('T')[0];
+      await this.notifications.notify(
+        dto.userId,
+        'SHIFT_ASSIGNED',
+        'You Have Been Assigned to a Shift',
+        `You have been assigned to a ${shift.requiredSkill.name} shift at ${shift.location.name} on ${shiftDateStr}.`,
+        { shiftId, locationId: shift.locationId },
+      );
+
+      // Notify the acting manager if this assignment triggers overtime warnings
+      const overtimeWarnings = constraintResult.violations.filter(
+        (v) =>
+          v.severity === 'warning' &&
+          (v.rule === 'WEEKLY_HOURS_40' || v.rule === 'WEEKLY_HOURS_35'),
+      );
+      if (overtimeWarnings.length > 0) {
+        await this.notifications.notify(
+          actor.sub,
+          'OVERTIME_WARNING',
+          `Overtime Warning — ${assignment.user.firstName} ${assignment.user.lastName}`,
+          overtimeWarnings.map((w) => w.message).join(' '),
+          { shiftId, userId: dto.userId },
+        );
+      }
+
       return { assigned: true, assignment, constraintResult };
-    } catch (err: any) {
-      if (err?.code === 'P2002') {
+    } catch (err: unknown) {
+      if (err instanceof Error && (err as { code?: string }).code === 'P2002') {
+        // Race condition: another request beat us — notify the losing manager
+        this.events.emitToUser(actor.sub, 'assignment:conflict', {
+          shiftId,
+          message: 'This staff member was just assigned by another manager.',
+        });
         throw new BadRequestException(
           'This staff member is already assigned to this shift.',
         );
@@ -477,6 +579,44 @@ export class ShiftsService {
     });
   }
 
+  async getOnDuty() {
+    const now = new Date();
+    const assignments = await this.prisma.shiftAssignment.findMany({
+      where: {
+        shift: { startTime: { lte: now }, endTime: { gte: now } },
+      },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+        shift: {
+          include: {
+            location: { select: { id: true, name: true, timezone: true } },
+            requiredSkill: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const grouped: Record<string, { location: any; staff: any[] }> = {};
+    for (const a of assignments) {
+      const locId = a.shift.locationId;
+      if (!grouped[locId]) {
+        grouped[locId] = { location: a.shift.location, staff: [] };
+      }
+      grouped[locId].staff.push({
+        userId: a.user.id,
+        name: `${a.user.firstName} ${a.user.lastName}`,
+        email: a.user.email,
+        skill: a.shift.requiredSkill,
+        shiftStart: a.shift.startTime,
+        shiftEnd: a.shift.endTime,
+      });
+    }
+
+    return Object.values(grouped);
+  }
+
   async getWeeklyHours(locationId: string, weekStart: string) {
     const start = new Date(weekStart);
     const end = new Date(weekStart);
@@ -495,7 +635,8 @@ export class ShiftsService {
       },
     });
 
-    const byUser = new Map<string, { user: any; minutes: number }>();
+    type UserSummary = { id: string; firstName: string; lastName: string };
+    const byUser = new Map<string, { user: UserSummary; minutes: number }>();
     for (const a of assignments) {
       const existing = byUser.get(a.userId) ?? { user: a.user, minutes: 0 };
       existing.minutes += differenceInMinutes(
@@ -518,7 +659,12 @@ export class ShiftsService {
     }));
   }
 
-  private assertEditAllowed(shift: any) {
+  private assertEditAllowed(shift: {
+    status: ShiftStatus;
+    publishedAt: Date | null;
+    startTime: Date;
+    editCutoffHours: number;
+  }) {
     if (shift.status === ShiftStatus.PUBLISHED && shift.publishedAt) {
       const hoursUntilShift =
         (shift.startTime.getTime() - Date.now()) / (1000 * 60 * 60);
@@ -549,17 +695,20 @@ export class ShiftsService {
     const monday = new Date(zoned);
     monday.setDate(zoned.getDate() + diff);
     monday.setHours(0, 0, 0, 0);
-    const { fromZonedTime } = require('date-fns-tz');
     return fromZonedTime(monday, tz);
   }
 
   private getWeekEnd(date: Date, tz: string): Date {
     const weekStart = this.getWeekStart(date, tz);
-    const { fromZonedTime } = require('date-fns-tz');
     const zoned = toZonedTime(weekStart, tz);
     zoned.setDate(zoned.getDate() + 6);
     zoned.setHours(23, 59, 59, 999);
     return fromZonedTime(zoned, tz);
+  }
+
+  private toJson(value: unknown): Prisma.InputJsonValue | undefined {
+    if (value === null || value === undefined) return undefined;
+    return value as Prisma.InputJsonValue;
   }
 
   private async writeAuditLog(
@@ -568,8 +717,8 @@ export class ShiftsService {
     entityType: string,
     entityId: string,
     locationId: string,
-    before: any,
-    after: any,
+    before: unknown,
+    after: unknown,
   ) {
     await this.prisma.auditLog.create({
       data: {
@@ -578,8 +727,8 @@ export class ShiftsService {
         action,
         userId,
         locationId,
-        beforeState: before ?? undefined,
-        afterState: after ?? undefined,
+        beforeState: this.toJson(before),
+        afterState: this.toJson(after),
       },
     });
   }

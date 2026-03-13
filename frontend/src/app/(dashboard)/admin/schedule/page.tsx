@@ -9,6 +9,9 @@ import { ShiftDetailPanel } from '@/components/schedule/shift-detail-panel';
 import { CreateShiftModal } from '@/components/schedule/create-shift-modal';
 import { useShifts } from '@/hooks/api/use-shifts';
 import { useLocations } from '@/hooks/api/use-locations';
+import { useSocketEvent } from '@/hooks/use-socket';
+import { useQueryClient } from '@tanstack/react-query';
+import { shiftKeys } from '@/hooks/api/use-shifts';
 import type { Shift } from '@/types/shift';
 
 function getMonday(date: Date): Date {
@@ -29,11 +32,22 @@ function formatWeekRange(monday: Date): string {
 
 export default function SchedulePage() {
   useSession();
+  const queryClient = useQueryClient();
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const datePickerRef = useRef<HTMLInputElement>(null);
+
+  useSocketEvent('shift:published', () => {
+    queryClient.invalidateQueries({ queryKey: shiftKeys.all });
+  });
+  useSocketEvent('shift:updated', () => {
+    queryClient.invalidateQueries({ queryKey: shiftKeys.all });
+  });
+  useSocketEvent('assignment:created', () => {
+    queryClient.invalidateQueries({ queryKey: shiftKeys.all });
+  });
 
   const { data: locations } = useLocations();
   const locationId = selectedLocationId || locations?.[0]?.id || '';

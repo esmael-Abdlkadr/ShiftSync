@@ -1,26 +1,81 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowLeftRight, ArrowDown, CheckCircle, Inbox } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { ArrowLeftRight, ArrowDown, CheckCircle, Inbox, Clock } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { SwapReviewCard } from '@/components/swaps/swap-review-card';
 import { DropReviewCard } from '@/components/swaps/drop-review-card';
 import { useSwaps } from '@/hooks/api/use-swaps';
 import { useDrops } from '@/hooks/api/use-drops';
+import type { DropRequest } from '@/types/swap';
 
-type Tab = 'swaps' | 'drops';
+type Tab = 'swaps' | 'open-drops' | 'drops';
+
+function formatTime(utcStr: string, tz: string) {
+  return new Date(utcStr).toLocaleTimeString('en-US', {
+    hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz,
+  });
+}
+
+function OpenDropCard({ drop }: { drop: DropRequest }) {
+  const tz = drop.shift.location.timezone;
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
+              Open — awaiting claim
+            </span>
+          </div>
+          <p className="text-sm font-semibold text-slate-900">
+            {drop.shift.location.name} · {drop.shift.requiredSkill.name}
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {new Date(drop.shift.startTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            {' · '}
+            {formatTime(drop.shift.startTime, tz)} – {formatTime(drop.shift.endTime, tz)}
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Dropped by: <span className="font-medium text-slate-700">{drop.requestor.firstName} {drop.requestor.lastName}</span>
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-[10px] text-slate-400">Expires</p>
+          <p className="text-xs font-medium text-amber-600">
+            {new Date(drop.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ManagerRequestsPage() {
-  const [tab, setTab] = useState<Tab>('swaps');
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get('tab');
+    if (t === 'open-drops' || t === 'drops' || t === 'swaps') return t;
+    return 'swaps';
+  });
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'open-drops' || t === 'drops' || t === 'swaps') setTab(t);
+  }, [searchParams]);
 
   const { data: swaps, isLoading: swapsLoading } = useSwaps({ status: 'PENDING_APPROVAL' });
+  const { data: openDrops, isLoading: openDropsLoading } = useDrops({ status: 'OPEN' });
   const { data: drops, isLoading: dropsLoading } = useDrops({ status: 'CLAIMED_PENDING' });
 
   const pendingSwaps = swaps ?? [];
+  const openDropsList = openDrops ?? [];
   const pendingDrops = drops ?? [];
 
   const tabs = [
     { id: 'swaps' as Tab, label: 'Pending Swaps', icon: ArrowLeftRight, count: pendingSwaps.length },
+    { id: 'open-drops' as Tab, label: 'Open Drops', icon: Clock, count: openDropsList.length },
     { id: 'drops' as Tab, label: 'Drop Claims', icon: ArrowDown, count: pendingDrops.length },
   ];
 
@@ -36,9 +91,9 @@ export default function ManagerRequestsPage() {
             <h1 className="text-lg font-semibold text-slate-900">Swap &amp; Coverage Requests</h1>
             <p className="text-xs text-slate-500">Review and approve pending swap and drop requests</p>
           </div>
-          {(pendingSwaps.length + pendingDrops.length) > 0 && (
+          {(pendingSwaps.length + openDropsList.length + pendingDrops.length) > 0 && (
             <span className="ml-auto text-xs font-medium bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full">
-              {pendingSwaps.length + pendingDrops.length} pending
+              {pendingSwaps.length + openDropsList.length + pendingDrops.length} pending
             </span>
           )}
         </div>
@@ -86,6 +141,26 @@ export default function ManagerRequestsPage() {
                 </div>
               ) : (
                 pendingSwaps.map((swap) => <SwapReviewCard key={swap.id} swap={swap} />)
+              )}
+            </div>
+          )}
+
+          {tab === 'open-drops' && (
+            <div className="max-w-2xl space-y-3">
+              {openDropsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="h-24 bg-slate-100 rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              ) : openDropsList.length === 0 ? (
+                <div className="text-center py-16 text-slate-400">
+                  <Inbox className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm font-medium">No open drop requests</p>
+                  <p className="text-xs mt-1">No staff have dropped shifts waiting to be claimed.</p>
+                </div>
+              ) : (
+                openDropsList.map((drop) => <OpenDropCard key={drop.id} drop={drop} />)
               )}
             </div>
           )}

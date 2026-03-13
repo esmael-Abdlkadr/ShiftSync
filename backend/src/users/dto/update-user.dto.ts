@@ -1,4 +1,13 @@
-import { IsString, IsOptional, IsInt, Min, Max, MaxLength, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  Min,
+  Max,
+  MaxLength,
+  IsEnum,
+  IsIn,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { UserRole } from '@prisma/client';
 
@@ -33,4 +42,8 @@ export class UpdateUserDto {
   @Type(() => Number)
   @Min(0)
   hourlyRate?: number;
+
+  @IsOptional()
+  @IsIn(['IN_APP', 'IN_APP_AND_EMAIL', 'NONE'])
+  notificationPreference?: string;
 }

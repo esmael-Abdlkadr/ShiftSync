@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Loader2, Clock, Users, ClipboardList, BarChart3, Calendar, Plus } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { OnDutyWidget } from '@/components/dashboard/on-duty-widget';
 import Link from 'next/link';
 
 export default function ManagerDashboard() {
@@ -72,6 +73,10 @@ export default function ManagerDashboard() {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="mb-6">
+            <OnDutyWidget />
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
