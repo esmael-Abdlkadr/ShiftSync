@@ -32,9 +32,25 @@ export function NotificationBell() {
   const unreadCount = data?.length ?? 0;
 
   useSocketEvent<NotificationPayload>('notification:new', (payload) => {
-    // Refetch so badge count is accurate
     queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    toast(payload.title, { icon: '🔔', duration: 4000 });
+    const silentTypes = [
+      'SHIFT_ASSIGNED',
+      'SWAP_REQUEST',
+      'SWAP_ACCEPTED',
+      'SWAP_PENDING_APPROVAL',
+      'SWAP_APPROVED',
+      'SWAP_REJECTED',
+      'SWAP_MANAGER_REJECTED',
+      'SWAP_CANCELLED',
+      'SWAP_SHIFT_EDITED',
+      'DROP_REQUESTED',
+      'DROP_CLAIMED',
+      'DROP_APPROVED',
+      'DROP_REJECTED',
+    ];
+    if (!silentTypes.includes(payload.type)) {
+      toast(payload.title, { icon: '🔔', duration: 4000 });
+    }
   });
 
   return (
