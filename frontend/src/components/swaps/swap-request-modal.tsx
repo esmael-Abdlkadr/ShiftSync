@@ -18,7 +18,7 @@ export function SwapRequestModal({ shift, isOpen, onClose, currentUserId }: Prop
   const [selectedTargetId, setSelectedTargetId] = useState<string>('');
   const createSwap = useCreateSwap();
 
-  const otherAssignees: ShiftAssignment[] = shift.assignments.filter(
+  const otherAssignees: ShiftAssignment[] = (shift.assignments ?? []).filter(
     (a) => a.user.id !== currentUserId,
   );
 

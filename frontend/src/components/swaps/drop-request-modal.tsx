@@ -24,13 +24,13 @@ function formatTime(utcStr: string, tz: string): string {
 export function DropRequestModal({ shift, isOpen, onClose }: Props) {
   const createDrop = useCreateDrop();
 
-  const expiresAt = new Date(new Date(shift.startTime).getTime() - 24 * 60 * 60 * 1000);
-  const shiftDate = new Date(shift.startTime).toLocaleDateString('en-US', {
+  const expiresAt = shift.startTime ? new Date(new Date(shift.startTime).getTime() - 24 * 60 * 60 * 1000) : null;
+  const shiftDate = shift.startTime ? new Date(shift.startTime).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
-  });
-  const tz = shift.location.timezone;
+  }) : '';
+  const tz = shift.location?.timezone ?? 'UTC';
 
   const handleSubmit = async () => {
     try {
@@ -86,7 +86,7 @@ export function DropRequestModal({ shift, isOpen, onClose }: Props) {
           <div className="text-xs text-amber-700 space-y-1">
             <p>
               Your assignment stays active until a manager approves a claimer. The drop request
-              will <strong>expire {expiresAt.toLocaleString()}</strong> if no one claims it.
+              will <strong>expire {expiresAt?.toLocaleString()}</strong> if no one claims it.
             </p>
           </div>
         </div>
