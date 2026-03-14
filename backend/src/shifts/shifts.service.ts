@@ -24,12 +24,18 @@ import type { JwtPayload } from '../auth/types/jwt-payload';
 
 @Injectable()
 export class ShiftsService {
+  private readonly defaultEditCutoffHours: number;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly constraints: ConstraintsService,
     private readonly notifications: NotificationsService,
     private readonly events: EventsService,
-  ) {}
+  ) {
+    this.defaultEditCutoffHours = process.env.EDIT_CUTOFF_HOURS
+      ? parseInt(process.env.EDIT_CUTOFF_HOURS, 10)
+      : 48;
+  }
 
   async findAll(actor: JwtPayload, query: QueryShiftsDto) {
     const { locationId, weekStart, status, skillId } = query;
@@ -124,7 +130,7 @@ export class ShiftsService {
         endTime: new Date(dto.endTime),
         headcount: dto.headcount,
         isPremium: dto.isPremium ?? false,
-        editCutoffHours: dto.editCutoffHours ?? 48,
+        editCutoffHours: dto.editCutoffHours ?? this.defaultEditCutoffHours,
         status: ShiftStatus.DRAFT,
       },
       include: {

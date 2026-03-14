@@ -1,9 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Menu } from 'lucide-react';
 import Link from 'next/link';
 import { Sidebar } from './sidebar';
 import { NotificationBell } from './notification-bell';
@@ -26,6 +27,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { status, data: session } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    setSidebarOpen(false);
+  }
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -43,13 +50,40 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="h-screen overflow-hidden bg-slate-50">
-      <Sidebar />
-      <div className="ml-64 h-screen flex flex-col overflow-hidden">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — fixed on desktop, slide-in on mobile */}
+      <div
+        className={`fixed left-0 top-0 h-full z-30 transition-transform duration-200 lg:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        <Sidebar />
+      </div>
+
+      {/* Main content */}
+      <div className="lg:ml-64 h-screen flex flex-col overflow-hidden">
         {/* Top header bar */}
-        <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
-          <p className="text-sm font-semibold text-slate-700">
-            {getPageTitle(pathname)}
-          </p>
+        <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <p className="text-sm font-semibold text-slate-700">
+              {getPageTitle(pathname)}
+            </p>
+          </div>
           <div className="flex items-center gap-4">
             <Link
               href="/notifications"

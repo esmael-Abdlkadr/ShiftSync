@@ -62,7 +62,7 @@ export function Sidebar() {
     role === 'ADMIN' ? ADMIN_NAV : role === 'MANAGER' ? MANAGER_NAV : STAFF_NAV;
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 bg-slate-900 text-white flex flex-col">
+    <aside className="w-64 h-full bg-slate-900 text-white flex flex-col">
       <div className="p-6 border-b border-slate-700">
         <Link href="/" className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center">

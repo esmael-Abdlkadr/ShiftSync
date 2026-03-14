@@ -2,28 +2,7 @@
 
 Full-stack scheduling platform for **Coastal Eats** restaurant group (4 locations, 2 time zones).
 
----
 
-## Quick Start
-
-```bash
-# 1. Start PostgreSQL
-docker-compose up -d
-
-# 2. Backend
-cd backend
-npm install
-npx prisma migrate deploy
-npx prisma db seed
-npm run start:dev   # http://localhost:3001
-
-# 3. Frontend
-cd frontend
-npm install
-npm run dev         # http://localhost:3000
-```
-
----
 
 ## Test Accounts
 
@@ -88,6 +67,12 @@ backend/    NestJS — port 3001
 ```
 
 **Key tech:** Prisma ORM · NextAuth.js (JWT) · Socket.io · TanStack Query · shadcn/ui · Tailwind CSS
+
+---
+
+## Known Limitations
+
+- Email notifications are simulated — events are logged to the backend console rather than sent via a real SMTP provider.
 
 ---
 
