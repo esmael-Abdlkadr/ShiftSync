@@ -1,7 +1,8 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ArrowLeftRight, ArrowDown, CheckCircle, Inbox, Clock } from 'lucide-react';
+import { Suspense } from 'react';
+import { ArrowLeftRight, ArrowDown, CheckCircle, Inbox, Clock, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { SwapReviewCard } from '@/components/swaps/swap-review-card';
 import { DropReviewCard } from '@/components/swaps/drop-review-card';
@@ -51,7 +52,7 @@ function OpenDropCard({ drop }: { drop: DropRequest }) {
   );
 }
 
-export default function ManagerRequestsPage() {
+function ManagerRequestsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -182,5 +183,19 @@ export default function ManagerRequestsPage() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function ManagerRequestsPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="h-full flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
+        </div>
+      </DashboardLayout>
+    }>
+      <ManagerRequestsContent />
+    </Suspense>
   );
 }
