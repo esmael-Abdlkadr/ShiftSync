@@ -44,7 +44,7 @@ export function SwapRequestModal({ shift, isOpen, onClose, currentUserId }: Prop
       isOpen={isOpen}
       onClose={handleClose}
       title="Request Shift Swap"
-      description={`${shift.requiredSkill.name} · ${new Date(shift.startTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`}
+      description={shift.requiredSkill ? `${shift.requiredSkill.name} · ${new Date(shift.startTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}` : ''}
       icon={ArrowLeftRight}
       size="md"
       footer={

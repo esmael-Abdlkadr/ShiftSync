@@ -73,7 +73,7 @@ export function DropRequestModal({ shift, isOpen, onClose }: Props) {
     >
       <div className="px-6 py-4 space-y-4">
         <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5 text-sm">
-          <div className="font-medium text-slate-900">{shift.requiredSkill.name}</div>
+          <div className="font-medium text-slate-900">{shift.requiredSkill?.name}</div>
           <div className="text-slate-600">{shiftDate}</div>
           <div className="text-slate-600">
             {formatTime(shift.startTime, tz)} – {formatTime(shift.endTime, tz)}

@@ -182,18 +182,21 @@ export default function StaffSchedulePage() {
         </div>
       </div>
 
-      {/* Modals */}
-      <SwapRequestModal
-        shift={swapShift ?? ({} as Shift)}
-        isOpen={!!swapShift}
-        onClose={() => setSwapShift(null)}
-        currentUserId={userId ?? ''}
-      />
-      <DropRequestModal
-        shift={dropShift ?? ({} as Shift)}
-        isOpen={!!dropShift}
-        onClose={() => setDropShift(null)}
-      />
+      {swapShift && (
+        <SwapRequestModal
+          shift={swapShift}
+          isOpen
+          onClose={() => setSwapShift(null)}
+          currentUserId={userId ?? ''}
+        />
+      )}
+      {dropShift && (
+        <DropRequestModal
+          shift={dropShift}
+          isOpen
+          onClose={() => setDropShift(null)}
+        />
+      )}
     </DashboardLayout>
   );
 }
