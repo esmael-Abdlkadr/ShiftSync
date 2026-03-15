@@ -62,7 +62,7 @@ Full-stack scheduling platform for **Coastal Eats** restaurant group (4 location
 
 | Service | URL |
 |---|---|
-| Frontend | https://priority-test.vercel.app |
+| Frontend | https://shift-sync-ten.vercel.app |
 | Backend API | https://api.inovixtechnology.com |
 
 ## Architecture
