@@ -62,8 +62,13 @@ export class DropsService {
         select: { locationId: true },
       });
       const locationIds = managed.map((m) => m.locationId);
-      where.shift = { locationId: { in: locationIds } };
-      if (query.locationId) where.shift = { locationId: query.locationId };
+      if (query.locationId) {
+        where.shift = locationIds.includes(query.locationId)
+          ? { locationId: query.locationId }
+          : { locationId: { in: [] } };
+      } else {
+        where.shift = { locationId: { in: locationIds } };
+      }
     } else if (query.locationId) {
       where.shift = { locationId: query.locationId };
     }
@@ -178,6 +183,8 @@ export class DropsService {
         { dropId: drop.id, shiftId: shift.id },
       );
     }
+
+    this.events.emitToLocation(shift.locationId, 'drop:created', { dropId: drop.id });
 
     return drop;
   }
@@ -425,6 +432,8 @@ export class DropsService {
         { dropId },
       );
     }
+
+    this.events.emitToLocation(drop.shift.locationId, 'drop:cancelled', { dropId });
 
     return updated;
   }

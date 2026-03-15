@@ -107,7 +107,9 @@ export function AssignStaffModal({ shift, isOpen, onClose }: AssignStaffModalPro
       } catch (err: unknown) {
         const member = eligible?.find((e) => e.id === userId);
         const name   = member ? `${member.firstName} ${member.lastName}` : 'Staff member';
-        const msg    = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+        const msg    =
+          (err as Error)?.message ||
+          (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
         toast.error(`${name}: ${msg ?? 'Assignment failed'}`);
       }
     }
@@ -120,7 +122,7 @@ export function AssignStaffModal({ shift, isOpen, onClose }: AssignStaffModalPro
   };
 
   const selectedMembers = eligible?.filter((e) => selectedIds.has(e.id)) ?? [];
-  const anyNeedOverride = selectedMembers.some((m) => m.overtimeRisk === 'high');
+  const anyNeedOverride = selectedMembers.some((m) => m.requiresOverride);
   const canConfirm      = selectedIds.size > 0 && (!anyNeedOverride || overrideReason);
 
   return (
@@ -209,6 +211,11 @@ export function AssignStaffModal({ shift, isOpen, onClose }: AssignStaffModalPro
                           <AlertTriangle className="h-3 w-3" /> Near OT
                         </span>
                       )}
+                      {member.requiresOverride && !member.hasConflict && (
+                        <span className="flex items-center gap-1 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">
+                          <AlertTriangle className="h-3 w-3" /> Override
+                        </span>
+                      )}
                     </div>
                   </div>
                   {isSelected && (
@@ -224,7 +231,7 @@ export function AssignStaffModal({ shift, isOpen, onClose }: AssignStaffModalPro
 
         {anyNeedOverride && (
           <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg space-y-3">
-            <p className="text-sm font-medium text-orange-800">Manager Override Required</p>
+            <p className="text-sm font-medium text-orange-800">Manager Override Required (7th consecutive day)</p>
             <select
               value={overrideReason}
               onChange={(e) => setOverrideReason(e.target.value as OverrideReason)}

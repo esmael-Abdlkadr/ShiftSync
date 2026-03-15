@@ -24,14 +24,27 @@ export class NotificationsController {
   async findAll(
     @CurrentUser() user: JwtPayload,
     @Query('unread') unread?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
+    const parsedLimit = Number(limit ?? '50');
+    const parsedOffset = Number(offset ?? '0');
+    const take = Number.isFinite(parsedLimit)
+      ? Math.min(Math.max(parsedLimit, 1), 100)
+      : 50;
+    const skip =
+      Number.isFinite(parsedOffset) && parsedOffset > 0
+        ? Math.floor(parsedOffset)
+        : 0;
+
     return this.prisma.notification.findMany({
       where: {
         userId: user.sub,
         ...(unread === 'true' ? { isRead: false } : {}),
       },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take,
+      skip,
     });
   }
 

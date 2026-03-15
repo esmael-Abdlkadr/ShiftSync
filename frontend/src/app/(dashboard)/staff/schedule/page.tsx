@@ -5,6 +5,9 @@ import { useState } from 'react';
 import { Calendar, ArrowLeftRight, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { useShifts } from '@/hooks/api/use-shifts';
+import { shiftKeys } from '@/hooks/api/use-shifts';
+import { useSocketEvent } from '@/hooks/use-socket';
+import { useQueryClient } from '@tanstack/react-query';
 import { SwapRequestModal } from '@/components/swaps/swap-request-modal';
 import { DropRequestModal } from '@/components/swaps/drop-request-modal';
 import { format, startOfWeek, addWeeks, subWeeks, isAfter, isBefore, addDays } from 'date-fns';
@@ -18,6 +21,7 @@ function getWeekStart(d: Date): Date {
 export default function StaffSchedulePage() {
   const { data: session } = useSession();
   const userId = session?.user?.id;
+  const queryClient = useQueryClient();
 
   const [weekBase, setWeekBase] = useState(() => getWeekStart(new Date()));
   const [swapShift, setSwapShift] = useState<Shift | null>(null);
@@ -26,20 +30,27 @@ export default function StaffSchedulePage() {
   const weekStart = weekBase.toISOString();
   const { data: shifts, isLoading } = useShifts({ weekStart, status: 'PUBLISHED' });
 
-  // Filter to shifts where current user is assigned
+  useSocketEvent('shift:published', () => {
+    queryClient.invalidateQueries({ queryKey: shiftKeys.all });
+  });
+  useSocketEvent('shift:updated', () => {
+    queryClient.invalidateQueries({ queryKey: shiftKeys.all });
+  });
+  useSocketEvent('assignment:created', () => {
+    queryClient.invalidateQueries({ queryKey: shiftKeys.all });
+  });
+
   const myShifts = (shifts ?? []).filter((s) =>
     s.assignments.some((a) => a.userId === userId),
   );
 
-  // Group by date string (YYYY-MM-DD)
   const grouped = myShifts.reduce<Record<string, Shift[]>>((acc, s) => {
-    const key = format(new Date(s.startTime), 'yyyy-MM-dd');
+    const key = formatInTimeZone(new Date(s.startTime), s.location.timezone, 'yyyy-MM-dd');
     if (!acc[key]) acc[key] = [];
     acc[key].push(s);
     return acc;
   }, {});
 
-  // Build 7-day date array for the week
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekBase, i));
   const now = new Date();
 
@@ -49,7 +60,6 @@ export default function StaffSchedulePage() {
   return (
     <DashboardLayout>
       <div className="h-full flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="shrink-0 flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-lg bg-slate-900 flex items-center justify-center">
@@ -61,7 +71,6 @@ export default function StaffSchedulePage() {
             </div>
           </div>
 
-          {/* Week navigator */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setWeekBase(subWeeks(weekBase, 1))}
@@ -87,7 +96,6 @@ export default function StaffSchedulePage() {
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
@@ -111,7 +119,6 @@ export default function StaffSchedulePage() {
 
                 return (
                   <div key={key}>
-                    {/* Day header */}
                     <div className="flex items-center gap-3 mb-2">
                       <div className="h-8 w-8 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
                         <span className="text-xs font-bold text-white">{format(day, 'd')}</span>
@@ -119,7 +126,6 @@ export default function StaffSchedulePage() {
                       <p className="text-sm font-semibold text-slate-700">{format(day, 'EEEE, MMMM d')}</p>
                     </div>
 
-                    {/* Shifts for the day */}
                     <div className="ml-11 space-y-2">
                       {dayShifts.map((shift) => {
                         const past = isPast(shift);
@@ -148,7 +154,6 @@ export default function StaffSchedulePage() {
                               </div>
                             </div>
 
-                            {/* Actions — only for future shifts */}
                             {future && (
                               <div className="flex items-center gap-2 shrink-0">
                                 <button
@@ -188,6 +193,7 @@ export default function StaffSchedulePage() {
           isOpen
           onClose={() => setSwapShift(null)}
           currentUserId={userId ?? ''}
+          allShifts={shifts ?? []}
         />
       )}
       {dropShift && (

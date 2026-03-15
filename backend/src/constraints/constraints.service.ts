@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+import { toZonedTime, fromZonedTime, format as tzFormat } from 'date-fns-tz';
 import { startOfDay, endOfDay, differenceInMinutes, subDays } from 'date-fns';
 import type {
   ConstraintCheckParams,
@@ -8,6 +8,46 @@ import type {
   Violation,
   Suggestion,
 } from './types';
+
+function localDayKey(utcDate: Date, tz: string): string {
+  return tzFormat(toZonedTime(utcDate, tz), 'yyyy-MM-dd');
+}
+
+function fitsInAvailabilityWindow(
+  shiftStartMin: number,
+  shiftEndMinsRaw: number,
+  avStartMin: number,
+  avEndMin: number,
+): boolean {
+  const DAY = 24 * 60;
+  const isOvernightAv = avEndMin <= avStartMin && avEndMin !== 0;
+
+  if (isOvernightAv) {
+    const avEndWrapped = avEndMin + DAY;
+    if (shiftStartMin >= avStartMin) {
+      const shiftEnd =
+        shiftEndMinsRaw > shiftStartMin
+          ? shiftEndMinsRaw
+          : shiftEndMinsRaw + DAY;
+      return shiftEnd <= avEndWrapped;
+    }
+    if (shiftStartMin < avEndMin) {
+      const shiftEnd =
+        shiftEndMinsRaw >= shiftStartMin
+          ? shiftEndMinsRaw
+          : shiftEndMinsRaw + DAY;
+      return shiftEnd <= avEndMin;
+    }
+    return false;
+  }
+
+  const shiftEnd =
+    shiftEndMinsRaw <= shiftStartMin && shiftEndMinsRaw !== 0
+      ? shiftEndMinsRaw + DAY
+      : shiftEndMinsRaw;
+
+  return shiftStartMin >= avStartMin && shiftEnd <= avEndMin;
+}
 
 @Injectable()
 export class ConstraintsService {
@@ -92,14 +132,34 @@ export class ConstraintsService {
     });
     if (overlapping.length > 0) {
       const conflict = overlapping[0].shift;
+      const conflictStart = new Date(conflict.startTime).toLocaleString(
+        'en-US',
+        {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: user.timezone,
+        },
+      );
+      const conflictEnd = new Date(conflict.endTime).toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: user.timezone,
+      });
       violations.push({
         rule: 'DOUBLE_BOOKING',
-        message: `${user.firstName} ${user.lastName} is already assigned to a shift from ${conflict.startTime.toISOString()} to ${conflict.endTime.toISOString()}.`,
+        message: `${user.firstName} ${user.lastName} is already assigned to another shift from ${conflictStart} to ${conflictEnd} (${user.timezone}).`,
         severity: 'block',
       });
     }
 
-    // Check 4 — 10-hour rest gap
     const shiftStartMs = shiftStart.getTime();
     const shiftEndMs = shiftEnd.getTime();
     const tenHoursMs = 10 * 60 * 60 * 1000;
@@ -135,13 +195,17 @@ export class ConstraintsService {
       'SATURDAY',
     ];
     const shiftDayOfWeek = dayNames[shiftStartInUserTz.getDay()];
-    const shiftDateStr = shiftStartInUserTz.toISOString().split('T')[0];
 
-    // Check exception first
+    const shiftDateKey = localDayKey(shiftStart, user.timezone);
+
     const exception = user.availabilityExceptions.find((ex) => {
-      const exDate = new Date(ex.date).toISOString().split('T')[0];
-      return exDate === shiftDateStr;
+      return localDayKey(new Date(ex.date), user.timezone) === shiftDateKey;
     });
+
+    const shiftStartMin =
+      shiftStartInUserTz.getHours() * 60 + shiftStartInUserTz.getMinutes();
+    const shiftEndRawMin =
+      shiftEndInUserTz.getHours() * 60 + shiftEndInUserTz.getMinutes();
 
     let availabilityBlocked = false;
     if (exception) {
@@ -155,13 +219,16 @@ export class ConstraintsService {
       } else if (exception.startTime && exception.endTime) {
         const [exStartH, exStartM] = exception.startTime.split(':').map(Number);
         const [exEndH, exEndM] = exception.endTime.split(':').map(Number);
-        const shiftStartMin =
-          shiftStartInUserTz.getHours() * 60 + shiftStartInUserTz.getMinutes();
-        const shiftEndMin =
-          shiftEndInUserTz.getHours() * 60 + shiftEndInUserTz.getMinutes();
         const exStartMin = exStartH * 60 + exStartM;
         const exEndMin = exEndH * 60 + exEndM;
-        if (shiftStartMin < exStartMin || shiftEndMin > exEndMin) {
+        if (
+          !fitsInAvailabilityWindow(
+            shiftStartMin,
+            shiftEndRawMin,
+            exStartMin,
+            exEndMin,
+          )
+        ) {
           availabilityBlocked = true;
           violations.push({
             rule: 'AVAILABILITY_WINDOW',
@@ -186,13 +253,16 @@ export class ConstraintsService {
           .split(':')
           .map(Number);
         const [avEndH, avEndM] = recurringAvail.endTime.split(':').map(Number);
-        const shiftStartMin =
-          shiftStartInUserTz.getHours() * 60 + shiftStartInUserTz.getMinutes();
-        const shiftEndMin =
-          shiftEndInUserTz.getHours() * 60 + shiftEndInUserTz.getMinutes();
         const avStartMin = avStartH * 60 + avStartM;
         const avEndMin = avEndH * 60 + avEndM;
-        if (shiftStartMin < avStartMin || shiftEndMin > avEndMin) {
+        if (
+          !fitsInAvailabilityWindow(
+            shiftStartMin,
+            shiftEndRawMin,
+            avStartMin,
+            avEndMin,
+          )
+        ) {
           availabilityBlocked = true;
           violations.push({
             rule: 'AVAILABILITY_WINDOW',

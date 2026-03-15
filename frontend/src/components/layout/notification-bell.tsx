@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 
 interface NotificationPayload {
+  id?: string;
   type: string;
   title: string;
   message: string;
@@ -49,7 +50,9 @@ export function NotificationBell() {
       'DROP_REJECTED',
     ];
     if (!silentTypes.includes(payload.type)) {
-      toast(payload.title, { icon: '🔔', duration: 4000 });
+      const toastId =
+        payload.id ?? `${payload.type}:${payload.title}:${payload.message}`;
+      toast(payload.title, { id: toastId, icon: '🔔', duration: 4000 });
     }
   });
 

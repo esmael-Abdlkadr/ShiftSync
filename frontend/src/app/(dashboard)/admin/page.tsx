@@ -10,6 +10,7 @@ import { useSwaps } from '@/hooks/api/use-swaps';
 import { useDrops } from '@/hooks/api/use-drops';
 import { useAuditLogs } from '@/hooks/api/use-audit';
 import { useShifts } from '@/hooks/api/use-shifts';
+import { useOvertimeCost } from '@/hooks/api/use-analytics';
 import { Loader2, CheckCircle2, ArrowLeftRight, Inbox } from 'lucide-react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
@@ -22,6 +23,20 @@ function getMonday(): string {
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
   return d.toISOString();
+}
+
+function getCurrentWeekRange() {
+  const start = new Date();
+  const day = start.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  start.setDate(start.getDate() + diffToMonday);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return {
+    dateFrom: start.toISOString().split('T')[0],
+    dateTo: end.toISOString().split('T')[0],
+  };
 }
 
 function getGreeting(): string {
@@ -52,11 +67,13 @@ function StatCard({
   value,
   loading,
   href,
+  sub,
 }: {
   label: string;
   value: number | string;
   loading?: boolean;
   href?: string;
+  sub?: string;
 }) {
   const inner = (
     <div className="bg-white border border-slate-200 rounded-xl px-6 py-5">
@@ -64,7 +81,10 @@ function StatCard({
       {loading ? (
         <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
       ) : (
-        <p className="text-3xl font-semibold text-slate-900 tabular-nums">{value}</p>
+        <>
+          <p className="text-3xl font-semibold text-slate-900 tabular-nums">{value}</p>
+          {sub ? <p className="text-xs text-slate-400 mt-1">{sub}</p> : null}
+        </>
       )}
     </div>
   );
@@ -165,6 +185,7 @@ function NeedsAttention({
 export default function AdminDashboard() {
   const { data: session } = useSession();
   const weekStart = getMonday();
+  const weekRange = getCurrentWeekRange();
 
   const { data: locations, isLoading: locationsLoading } = useLocations();
   const { data: usersData, isLoading: usersLoading } = useUsers({ role: 'STAFF', limit: 1 });
@@ -172,6 +193,7 @@ export default function AdminDashboard() {
   const { data: swaps, isLoading: swapsLoading } = useSwaps({ status: 'PENDING_MANAGER' });
   const { data: drops, isLoading: dropsLoading } = useDrops({ status: 'PENDING_MANAGER' });
   const { data: auditData, isLoading: auditLoading } = useAuditLogs({ limit: 6 });
+  const { data: overtimeCost, isLoading: overtimeCostLoading } = useOvertimeCost(weekRange);
 
   const firstLocationId = locations?.[0]?.id ?? '';
   const locationCount = locations?.length ?? 0;
@@ -195,11 +217,18 @@ export default function AdminDashboard() {
 
         <div className="px-8 py-6 space-y-6">
           {/* Stat row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <StatCard label="Locations" value={locationCount} loading={locationsLoading} href="/admin/locations" />
             <StatCard label="Total Staff" value={staffCount} loading={usersLoading} href="/admin/users" />
             <StatCard label="Active Shifts" value={activeShifts} loading={shiftsLoading} href="/admin/schedule" />
             <StatCard label="Needs Attention" value={pendingCount} loading={pendingLoading} />
+            <StatCard
+              label="Projected OT Cost"
+              value={`$${(overtimeCost?.summary.overtimeCost ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              loading={overtimeCostLoading}
+              href="/admin/reports"
+              sub={`Total: $${(overtimeCost?.summary.totalCost ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            />
           </div>
 
           {/* Bottom grid */}

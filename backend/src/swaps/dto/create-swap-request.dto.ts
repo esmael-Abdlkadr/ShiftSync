@@ -6,4 +6,7 @@ export class CreateSwapRequestDto {
 
   @IsString()
   targetUserId: string;
+
+  @IsString()
+  targetShiftId: string;
 }

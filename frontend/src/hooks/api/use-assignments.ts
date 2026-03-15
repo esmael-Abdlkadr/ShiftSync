@@ -25,14 +25,18 @@ export function useAssignStaff() {
       dto: AssignStaffRequest;
     }): Promise<AssignStaffResponse> => {
       const { data } = await api.post<AssignStaffResponse>(`/shifts/${shiftId}/assign`, dto);
+      if (!data.assigned) {
+        const messages = data.constraintResult?.violations
+          ?.map((v) => v.message)
+          .join(' ');
+        throw new Error(messages ?? 'Constraint violation prevented assignment.');
+      }
       return data;
     },
-    onSuccess: (result, { shiftId }) => {
-      if (result.assigned) {
-        queryClient.invalidateQueries({ queryKey: shiftKeys.detail(shiftId) });
-        queryClient.invalidateQueries({ queryKey: shiftKeys.lists() });
-        queryClient.invalidateQueries({ queryKey: ['eligible-staff', shiftId] });
-      }
+    onSuccess: (_, { shiftId }) => {
+      queryClient.invalidateQueries({ queryKey: shiftKeys.detail(shiftId) });
+      queryClient.invalidateQueries({ queryKey: shiftKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['eligible-staff', shiftId] });
     },
   });
 }

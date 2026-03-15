@@ -3,6 +3,28 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+function getNextMonday(): Date {
+  const now = new Date();
+  const monday = new Date(now);
+  const day = monday.getDay();
+  const diff = day === 0 ? 1 : 8 - day;
+  monday.setDate(monday.getDate() + diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function atTime(date: Date, hour: number, minute: number): Date {
+  const result = new Date(date);
+  result.setHours(hour, minute, 0, 0);
+  return result;
+}
+
 async function main() {
   const adminPasswordHash = await bcrypt.hash('admin123', 10);
   const managerPasswordHash = await bcrypt.hash('manager123', 10);
@@ -715,6 +737,103 @@ async function main() {
   }
 
   console.log('Created availability exceptions for Ivy');
+
+  const tom = getStaff('Tom');
+  const nextMonday = getNextMonday();
+  const overtimeTestShiftIds = [
+    'seed_ot_mon',
+    'seed_ot_tue',
+    'seed_ot_wed',
+    'seed_ot_thu',
+    'seed_ot_fri',
+    'seed_ot_sat',
+    'seed_ot_sun',
+  ];
+
+  for (let i = 0; i < overtimeTestShiftIds.length; i++) {
+    const d = addDays(nextMonday, i);
+    await prisma.shift.upsert({
+      where: { id: overtimeTestShiftIds[i] },
+      update: {
+        locationId: 'loc_downtown_sf',
+        skillId: 'skill_bartender',
+        date: new Date(d.toISOString().split('T')[0]),
+        startTime: atTime(d, 9, 0),
+        endTime: atTime(d, 17, 0),
+        headcount: 1,
+        status: 'PUBLISHED',
+        isPremium: false,
+        publishedAt: new Date(),
+      },
+      create: {
+        id: overtimeTestShiftIds[i],
+        locationId: 'loc_downtown_sf',
+        skillId: 'skill_bartender',
+        date: new Date(d.toISOString().split('T')[0]),
+        startTime: atTime(d, 9, 0),
+        endTime: atTime(d, 17, 0),
+        headcount: 1,
+        status: 'PUBLISHED',
+        isPremium: false,
+        publishedAt: new Date(),
+      },
+    });
+  }
+
+  const preassignedShiftIds = [
+    'seed_ot_mon',
+    'seed_ot_tue',
+    'seed_ot_wed',
+    'seed_ot_thu',
+    'seed_ot_fri',
+  ];
+  for (const shiftId of preassignedShiftIds) {
+    await prisma.shiftAssignment.upsert({
+      where: { shiftId_userId: { shiftId, userId: tom.id } },
+      update: { assignedById: managers[0].id },
+      create: {
+        shiftId,
+        userId: tom.id,
+        assignedById: managers[0].id,
+      },
+    });
+  }
+
+  const tue = addDays(nextMonday, 1);
+  const extraDailyTestShifts = [
+    { id: 'seed_ot_tue_extra_4h', start: [18, 0] as const, end: [22, 0] as const },
+    { id: 'seed_ot_tue_extra_1h', start: [22, 30] as const, end: [23, 30] as const },
+  ];
+  for (const s of extraDailyTestShifts) {
+    await prisma.shift.upsert({
+      where: { id: s.id },
+      update: {
+        locationId: 'loc_downtown_sf',
+        skillId: 'skill_bartender',
+        date: new Date(tue.toISOString().split('T')[0]),
+        startTime: atTime(tue, s.start[0], s.start[1]),
+        endTime: atTime(tue, s.end[0], s.end[1]),
+        headcount: 1,
+        status: 'PUBLISHED',
+        isPremium: false,
+        publishedAt: new Date(),
+      },
+      create: {
+        id: s.id,
+        locationId: 'loc_downtown_sf',
+        skillId: 'skill_bartender',
+        date: new Date(tue.toISOString().split('T')[0]),
+        startTime: atTime(tue, s.start[0], s.start[1]),
+        endTime: atTime(tue, s.end[0], s.end[1]),
+        headcount: 1,
+        status: 'PUBLISHED',
+        isPremium: false,
+        publishedAt: new Date(),
+      },
+    });
+  }
+
+  console.log('Created Section 4 overtime compliance test scenario');
 
   console.log('\n========================================');
   console.log('Seed data created successfully!');

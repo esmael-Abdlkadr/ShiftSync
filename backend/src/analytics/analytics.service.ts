@@ -315,7 +315,14 @@ export class AnalyticsService {
         shift: { startTime: { gte: from, lte: to } },
       },
       include: {
-        shift: { select: { startTime: true, endTime: true } },
+        shift: {
+          select: {
+            id: true,
+            startTime: true,
+            endTime: true,
+            location: { select: { id: true, name: true } },
+          },
+        },
       },
     });
 
@@ -329,6 +336,15 @@ export class AnalyticsService {
     };
 
     const userWeekMinutes = new Map<string, Map<string, number>>();
+    type OvertimeContributor = {
+      shiftId: string;
+      locationId: string;
+      locationName: string;
+      startTime: string;
+      endTime: string;
+      overtimeMinutes: number;
+    };
+    const userContributors = new Map<string, OvertimeContributor[]>();
     for (const a of allUserAssignments) {
       const weekKey = getWeekKey(new Date(a.shift.startTime));
       if (!userWeekMinutes.has(a.userId)) {
@@ -337,6 +353,44 @@ export class AnalyticsService {
       const weekMap = userWeekMinutes.get(a.userId)!;
       const mins = differenceInMinutes(a.shift.endTime, a.shift.startTime);
       weekMap.set(weekKey, (weekMap.get(weekKey) ?? 0) + mins);
+    }
+
+    const groupedByUserWeek = new Map<string, typeof allUserAssignments>();
+    for (const assignment of allUserAssignments) {
+      const weekKey = getWeekKey(new Date(assignment.shift.startTime));
+      const key = `${assignment.userId}:${weekKey}`;
+      if (!groupedByUserWeek.has(key)) groupedByUserWeek.set(key, []);
+      groupedByUserWeek.get(key)!.push(assignment);
+    }
+    for (const [key, assignments] of groupedByUserWeek.entries()) {
+      const [userId] = key.split(':');
+      const sorted = [...assignments].sort(
+        (a, b) =>
+          new Date(a.shift.startTime).getTime() -
+          new Date(b.shift.startTime).getTime(),
+      );
+      let accumulated = 0;
+      for (const assignment of sorted) {
+        const mins = differenceInMinutes(
+          assignment.shift.endTime,
+          assignment.shift.startTime,
+        );
+        const beforeOvertime = Math.max(accumulated - 40 * 60, 0);
+        accumulated += mins;
+        const afterOvertime = Math.max(accumulated - 40 * 60, 0);
+        const overtimeMinutes = afterOvertime - beforeOvertime;
+        if (overtimeMinutes > 0) {
+          if (!userContributors.has(userId)) userContributors.set(userId, []);
+          userContributors.get(userId)!.push({
+            shiftId: assignment.shift.id,
+            locationId: assignment.shift.location.id,
+            locationName: assignment.shift.location.name,
+            startTime: assignment.shift.startTime.toISOString(),
+            endTime: assignment.shift.endTime.toISOString(),
+            overtimeMinutes,
+          });
+        }
+      }
     }
 
     // Location-only hours per user (for the "hours at this location" column)
@@ -395,6 +449,7 @@ export class AnalyticsService {
         regularCost,
         overtimeCost,
         rateUnset,
+        overtimeContributors: userContributors.get(user.id) ?? [],
       };
     });
 

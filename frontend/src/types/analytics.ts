@@ -41,6 +41,14 @@ export interface CostEntry {
   regularCost: number | null;
   overtimeCost: number | null;
   rateUnset: boolean;
+  overtimeContributors: {
+    shiftId: string;
+    locationId: string;
+    locationName: string;
+    startTime: string;
+    endTime: string;
+    overtimeMinutes: number;
+  }[];
 }
 
 export interface CostReport {

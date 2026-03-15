@@ -59,7 +59,13 @@ export class AuditService {
 
   async findByShift(shiftId: string) {
     return this.prisma.auditLog.findMany({
-      where: { shiftId },
+      where: {
+        OR: [
+          { shiftId },
+          { entityId: shiftId, entityType: 'Shift' },
+          { entityId: shiftId, entityType: 'ShiftAssignment' },
+        ],
+      },
       include: AUDIT_INCLUDE,
       orderBy: { createdAt: 'asc' },
     });

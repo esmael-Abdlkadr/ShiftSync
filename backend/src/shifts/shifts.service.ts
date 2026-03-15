@@ -64,7 +64,11 @@ export class ShiftsService {
       where.startTime = { gte: start, lt: end };
     }
 
-    if (status) where.status = status;
+    if (actor.role === UserRole.STAFF) {
+      where.status = ShiftStatus.PUBLISHED;
+    } else if (status) {
+      where.status = status;
+    }
     if (skillId) where.skillId = skillId;
 
     return this.prisma.shift.findMany({
@@ -103,7 +107,6 @@ export class ShiftsService {
                 firstName: true,
                 lastName: true,
                 email: true,
-                hourlyRate: true,
               },
             },
             assignedBy: {
@@ -118,16 +121,40 @@ export class ShiftsService {
     return shift;
   }
 
+  private validateShiftTimes(startTime: Date, endTime: Date): void {
+    if (isNaN(startTime.getTime())) {
+      throw new BadRequestException('startTime is not a valid ISO date.');
+    }
+    if (isNaN(endTime.getTime())) {
+      throw new BadRequestException('endTime is not a valid ISO date.');
+    }
+    const durationMinutes = differenceInMinutes(endTime, startTime);
+    if (durationMinutes <= 0) {
+      throw new BadRequestException(
+        'endTime must be after startTime. For overnight shifts, ensure endTime is the next calendar day (e.g. startTime 2024-01-01T23:00:00Z, endTime 2024-01-02T03:00:00Z).',
+      );
+    }
+    if (durationMinutes > 24 * 60) {
+      throw new BadRequestException(
+        'A single shift cannot exceed 24 hours. Split into multiple shifts if needed.',
+      );
+    }
+  }
+
   async create(actor: JwtPayload, dto: CreateShiftDto) {
     await this.assertLocationAccess(actor, dto.locationId);
+
+    const startTime = new Date(dto.startTime);
+    const endTime = new Date(dto.endTime);
+    this.validateShiftTimes(startTime, endTime);
 
     const shift = await this.prisma.shift.create({
       data: {
         locationId: dto.locationId,
         skillId: dto.skillId,
         date: new Date(dto.date),
-        startTime: new Date(dto.startTime),
-        endTime: new Date(dto.endTime),
+        startTime,
+        endTime,
         headcount: dto.headcount,
         isPremium: dto.isPremium ?? false,
         editCutoffHours: dto.editCutoffHours ?? this.defaultEditCutoffHours,
@@ -145,6 +172,7 @@ export class ShiftsService {
       'Shift',
       shift.id,
       shift.locationId,
+      shift.id,
       null,
       shift,
     );
@@ -172,6 +200,12 @@ export class ShiftsService {
     if (dto.date) patch.date = new Date(dto.date);
     if (dto.startTime) patch.startTime = new Date(dto.startTime);
     if (dto.endTime) patch.endTime = new Date(dto.endTime);
+
+    if (patch.startTime || patch.endTime) {
+      const resolvedStart = patch.startTime ?? shift.startTime;
+      const resolvedEnd = patch.endTime ?? shift.endTime;
+      this.validateShiftTimes(resolvedStart, resolvedEnd);
+    }
     if (dto.headcount !== undefined) patch.headcount = dto.headcount;
     if (dto.isPremium !== undefined) patch.isPremium = dto.isPremium;
     if (dto.editCutoffHours !== undefined)
@@ -197,6 +231,7 @@ export class ShiftsService {
       'Shift',
       id,
       shift.locationId,
+      id,
       before,
       updated,
     );
@@ -270,16 +305,17 @@ export class ShiftsService {
       );
     }
 
-    await this.prisma.shift.delete({ where: { id } });
     await this.writeAuditLog(
       actor.sub,
       'DELETE',
       'Shift',
       id,
       shift.locationId,
+      id,
       shift,
       null,
     );
+    await this.prisma.shift.delete({ where: { id } });
     return { message: 'Shift deleted successfully' };
   }
 
@@ -302,6 +338,7 @@ export class ShiftsService {
       'Shift',
       id,
       shift.locationId,
+      id,
       { status: shift.status },
       { status: updated.status },
     );
@@ -363,6 +400,7 @@ export class ShiftsService {
       'Shift',
       id,
       shift.locationId,
+      id,
       { status: shift.status },
       { status: updated.status },
     );
@@ -431,6 +469,7 @@ export class ShiftsService {
         'ShiftAssignment',
         assignment.id,
         shift.locationId,
+        shiftId,
         null,
         {
           shiftId,
@@ -509,6 +548,7 @@ export class ShiftsService {
       'ShiftAssignment',
       assignment.id,
       shift.locationId,
+      shiftId,
       { userId, shiftId },
       null,
     );
@@ -541,43 +581,65 @@ export class ShiftsService {
     const weekStart = this.getWeekStart(shift.date, shift.location.timezone);
     const weekEnd = this.getWeekEnd(shift.date, shift.location.timezone);
 
-    const result = candidates.map((candidate) => {
-      const hasConflict = candidate.shiftAssignments.some((a) => {
-        const s = a.shift;
-        return s.startTime < shift.endTime && s.endTime > shift.startTime;
-      });
+    const result = await Promise.all(
+      candidates.map(async (candidate) => {
+        const hasConflict = candidate.shiftAssignments.some((a) => {
+          const s = a.shift;
+          return s.startTime < shift.endTime && s.endTime > shift.startTime;
+        });
 
-      const weeklyMinutes = candidate.shiftAssignments
-        .filter(
-          (a) => a.shift.startTime >= weekStart && a.shift.startTime <= weekEnd,
-        )
-        .reduce(
-          (sum, a) =>
-            sum + differenceInMinutes(a.shift.endTime, a.shift.startTime),
-          0,
+        const weeklyMinutes = candidate.shiftAssignments
+          .filter(
+            (a) =>
+              a.shift.startTime >= weekStart && a.shift.startTime <= weekEnd,
+          )
+          .reduce(
+            (sum, a) =>
+              sum + differenceInMinutes(a.shift.endTime, a.shift.startTime),
+            0,
+          );
+
+        const currentWeeklyHours = Math.round((weeklyMinutes / 60) * 10) / 10;
+        const shiftMinutes = differenceInMinutes(
+          shift.endTime,
+          shift.startTime,
         );
+        const projectedHours =
+          Math.round(((weeklyMinutes + shiftMinutes) / 60) * 10) / 10;
 
-      const currentWeeklyHours = Math.round((weeklyMinutes / 60) * 10) / 10;
-      const shiftMinutes = differenceInMinutes(shift.endTime, shift.startTime);
-      const projectedHours =
-        Math.round(((weeklyMinutes + shiftMinutes) / 60) * 10) / 10;
+        const constraintPreview = await this.constraints.check({
+          userId: candidate.id,
+          shiftId,
+          shiftStart: shift.startTime,
+          shiftEnd: shift.endTime,
+          shiftDate: shift.date,
+          locationId: shift.locationId,
+          locationTimezone: shift.location.timezone,
+          requiredSkillId: shift.skillId,
+        });
+        const overrideRules = constraintPreview.violations
+          .filter((v) => v.severity === 'override_required')
+          .map((v) => v.rule);
 
-      return {
-        id: candidate.id,
-        firstName: candidate.firstName,
-        lastName: candidate.lastName,
-        email: candidate.email,
-        hasConflict,
-        currentWeeklyHours,
-        projectedWeeklyHours: projectedHours,
-        overtimeRisk:
-          projectedHours >= 40
-            ? 'high'
-            : projectedHours >= 35
-              ? 'medium'
-              : 'low',
-      };
-    });
+        return {
+          id: candidate.id,
+          firstName: candidate.firstName,
+          lastName: candidate.lastName,
+          email: candidate.email,
+          hasConflict,
+          currentWeeklyHours,
+          projectedWeeklyHours: projectedHours,
+          overtimeRisk:
+            projectedHours >= 40
+              ? 'high'
+              : projectedHours >= 35
+                ? 'medium'
+                : 'low',
+          requiresOverride: overrideRules.length > 0,
+          overrideRules,
+        };
+      }),
+    );
 
     return result.sort((a, b) => {
       if (a.hasConflict !== b.hasConflict) return a.hasConflict ? 1 : -1;
@@ -723,6 +785,7 @@ export class ShiftsService {
     entityType: string,
     entityId: string,
     locationId: string,
+    shiftId: string | null,
     before: unknown,
     after: unknown,
   ) {
@@ -733,6 +796,7 @@ export class ShiftsService {
         action,
         userId,
         locationId,
+        ...(shiftId ? { shiftId } : {}),
         beforeState: this.toJson(before),
         afterState: this.toJson(after),
       },

@@ -58,12 +58,19 @@ Full-stack scheduling platform for **Coastal Eats** restaurant group (4 location
 
 ---
 
+## Live URLs
+
+| Service | URL |
+|---|---|
+| Frontend | https://priority-test.vercel.app |
+| Backend API | https://api.inovixtechnology.com |
+
 ## Architecture
 
 ```
-frontend/   Next.js 14 (App Router) — port 3000
-backend/    NestJS — port 3001
-            PostgreSQL — port 5433 (Docker)
+frontend/   Next.js 14 (App Router)  — deployed on Vercel
+backend/    NestJS                   — deployed on cPanel (Node.js)
+database/   PostgreSQL               — hosted on Supabase
 ```
 
 **Key tech:** Prisma ORM · NextAuth.js (JWT) · Socket.io · TanStack Query · shadcn/ui · Tailwind CSS
@@ -76,15 +83,22 @@ backend/    NestJS — port 3001
 
 ---
 
-## Documented Ambiguity Decisions
+## Ambiguity Decisions
 
-| Ambiguity | Decision |
+**De-certification history:** Past shifts are kept. A `decertifiedAt` date is recorded so history still appears in reports and the audit log. Only future assignments are blocked.
+
+**Desired hours vs availability:** Availability is a hard block. Desired hours are a personal target that never blocks assignment — they only show up in the Reports page as a gap so managers can balance the schedule fairly.
+
+**Consecutive days (1h vs 11h):** Any shift on a calendar day counts as a day worked, regardless of length. The 6th/7th day warnings are based on days, not hours.
+
+**Shift edited after swap approval:** The swap is cancelled automatically and both staff get notified. They agreed to the original shift details, so any edit voids that agreement.
+
+**Location spanning a timezone boundary:** Each location has one timezone set by the manager. If a business truly needs two, the right approach is two separate location records.
+
+**Other calls made:**
+
+| Area | Decision |
 |---|---|
-| Historical data when de-certified | Kept — soft delete via `decertifiedAt` |
-| Desired hours vs availability | Availability = hard constraint; desired hours = fairness metric only |
-| Consecutive days (1h vs 11h shift) | Any shift counts as a worked day |
-| Shift edited after swap approval | Swap auto-cancelled, both parties notified |
-| Location spanning timezone boundary | Single canonical timezone per location |
-| User availability timezone | Interpreted in user's home timezone, not location timezone |
-| Headcount over-assignment | Allowed with warning |
-| 7th consecutive day override | Requires documented reason from predefined dropdown |
+| Staff availability timezone | Interpreted in the staff member's own timezone, not the location's |
+| Headcount over-assignment | Allowed with a warning |
+| 7th consecutive day override | Manager must select a reason which is saved to the audit log |

@@ -33,6 +33,7 @@ export interface SwapShift {
 export interface SwapRequest {
   id: string;
   shiftId: string;
+  targetShiftId: string;
   initiatorId: string;
   targetId: string;
   status: SwapRequestStatus;
@@ -42,6 +43,7 @@ export interface SwapRequest {
   managerNotes: string | null;
   cancelledReason: string | null;
   shift: SwapShift;
+  targetShift: SwapShift;
   initiator: SwapUser;
   target: SwapUser;
   manager: SwapUser | null;
@@ -71,6 +73,7 @@ export interface DropRequest {
 export interface CreateSwapRequestPayload {
   shiftId: string;
   targetUserId: string;
+  targetShiftId: string;
 }
 
 export interface RespondSwapPayload {

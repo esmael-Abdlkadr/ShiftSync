@@ -69,14 +69,23 @@ export class UsersService {
       });
       const managedLocationIds = managedLocations.map((l) => l.locationId);
 
-      where.OR = [
-        {
-          certifiedLocations: {
-            some: { locationId: { in: managedLocationIds } },
+      const locationScope: Prisma.UserWhereInput = {
+        OR: [
+          {
+            certifiedLocations: {
+              some: { locationId: { in: managedLocationIds } },
+            },
           },
-        },
-        { id: currentUserId },
-      ];
+          { id: currentUserId },
+        ],
+      };
+
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, locationScope];
+        delete where.OR;
+      } else {
+        where.OR = locationScope.OR;
+      }
     }
 
     const [users, total] = await Promise.all([
@@ -119,7 +128,11 @@ export class UsersService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, currentUserId: string, currentUserRole: UserRole) {
+    if (currentUserRole === UserRole.STAFF && currentUserId !== id) {
+      throw new ForbiddenException('Access denied');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -209,7 +222,7 @@ export class UsersService {
     return updated;
   }
 
-  async softDelete(id: string) {
+  async softDelete(id: string, actorId: string) {
     const user = await this.prisma.user.findUnique({ where: { id } });
 
     if (!user) {
@@ -230,7 +243,7 @@ export class UsersService {
       data: { isActive: false },
     });
 
-    await this.writeAuditLog(id, 'DEACTIVATE', 'User', id, user, updated);
+    await this.writeAuditLog(actorId, 'DEACTIVATE', 'User', id, user, updated);
 
     return updated;
   }
@@ -554,9 +567,25 @@ export class UsersService {
       );
     }
 
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, lastName: true },
+    });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
     await this.prisma.availabilityException.delete({
       where: { id: exceptionId },
     });
+
+    const dateStr = exception.date.toISOString().split('T')[0];
+    await this.notifyManagersOfAvailabilityChange(
+      userId,
+      user.firstName,
+      user.lastName,
+      `${user.firstName} ${user.lastName} removed their availability exception on ${dateStr}. Please review upcoming schedules if needed.`,
+    );
 
     return { message: 'Exception removed successfully' };
   }

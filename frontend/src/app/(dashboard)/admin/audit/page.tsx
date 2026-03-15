@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ClipboardList, Download, RefreshCw } from 'lucide-react';
 import { useAuditLogs } from '@/hooks/api/use-audit';
 import { useLocations } from '@/hooks/api/use-locations';
-import { useExportCsv } from '@/hooks/use-export-csv';
+import { api } from '@/lib/api';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import {
   DataTable,
@@ -12,7 +12,8 @@ import {
   type Column,
 } from '@/components/ui/data-table';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { AuditLogEntry, QueryAuditParams } from '@/types/audit';
+import type { QueryAuditParams } from '@/types/audit';
+import type { AuditLogEntry } from '@/types/audit';
 
 const ACTION_OPTIONS = [
   { value: 'CREATE', label: 'Create' },
@@ -21,7 +22,7 @@ const ACTION_OPTIONS = [
   { value: 'PUBLISH', label: 'Publish' },
   { value: 'UNPUBLISH', label: 'Unpublish' },
   { value: 'ASSIGN_STAFF', label: 'Assign Staff' },
-  { value: 'UNASSIGN_STAFF', label: 'Unassign Staff' },
+  { value: 'REMOVE_ASSIGNMENT', label: 'Unassign Staff' },
   { value: 'DEACTIVATE', label: 'Deactivate' },
   { value: 'APPROVE_SWAP', label: 'Approve Swap' },
   { value: 'REJECT_SWAP', label: 'Reject Swap' },
@@ -46,7 +47,7 @@ function ActionBadge({ action }: { action: string }) {
   } else if (['UPDATE', 'UNPUBLISH', 'ASSIGN_STAFF'].includes(action)) {
     colour = 'bg-blue-100 text-blue-700';
   } else if (
-    ['DELETE', 'UNASSIGN_STAFF', 'DEACTIVATE', 'REJECT_SWAP', 'REJECT_DROP'].includes(action)
+    ['DELETE', 'REMOVE_ASSIGNMENT', 'DEACTIVATE', 'REJECT_SWAP', 'REJECT_DROP'].includes(action)
   ) {
     colour = 'bg-red-100 text-red-700';
   }
@@ -57,28 +58,6 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
-const CSV_COLUMNS = [
-  { key: 'id', header: 'ID' },
-  {
-    key: 'createdAt',
-    header: 'Date',
-    getValue: (r: AuditLogEntry) => new Date(r.createdAt).toISOString(),
-  },
-  {
-    key: 'actor',
-    header: 'Actor',
-    getValue: (r: AuditLogEntry) => `${r.user.firstName} ${r.user.lastName}`,
-  },
-  { key: 'actorEmail', header: 'Actor Email', getValue: (r: AuditLogEntry) => r.user.email },
-  { key: 'action', header: 'Action' },
-  { key: 'entityType', header: 'Entity Type' },
-  { key: 'entityId', header: 'Entity ID' },
-  {
-    key: 'location',
-    header: 'Location',
-    getValue: (r: AuditLogEntry) => r.location?.name ?? '',
-  },
-];
 
 export default function AuditLogPage() {
   const [page, setPage] = useState(1);
@@ -107,7 +86,6 @@ export default function AuditLogPage() {
   };
 
   const { data, isLoading, refetch } = useAuditLogs(params);
-  const { exportCsv } = useExportCsv();
 
   const entries = data?.entries ?? [];
   const total = data?.total ?? 0;
@@ -129,6 +107,24 @@ export default function AuditLogPage() {
   const handleFilterChange = (setter: (v: string) => void) => (v: string) => {
     setter(v);
     setPage(1);
+  };
+
+  const handleExport = async () => {
+    const searchParams = new URLSearchParams();
+    if (locationId) searchParams.set('locationId', locationId);
+    if (entityType) searchParams.set('entityType', entityType);
+    if (action) searchParams.set('action', action);
+    if (dateFrom) searchParams.set('dateFrom', dateFrom);
+    if (dateTo) searchParams.set('dateTo', dateTo);
+    const res = await api.get<Blob>(`/audit/export?${searchParams.toString()}`, {
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'audit-log.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const columns: Column<AuditLogEntry>[] = [
@@ -209,8 +205,8 @@ export default function AuditLogPage() {
               <RefreshCw className="h-4 w-4" />
             </button>
             <button
-              onClick={() => exportCsv(entries, CSV_COLUMNS, 'audit-log')}
-              disabled={entries.length === 0}
+              onClick={() => void handleExport()}
+              disabled={total === 0}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="h-4 w-4" />

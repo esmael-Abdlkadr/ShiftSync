@@ -135,7 +135,7 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
 
   return (
     <>
-      <div className="flex flex-col h-full bg-white border-l border-slate-200">
+      <div className="flex flex-col h-full min-h-0 bg-white border-l border-slate-200">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <div className="flex items-center gap-2">
@@ -174,7 +174,7 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
 
         {/* Details */}
         {tab === 'details' && (
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
           <div className="space-y-2.5">
             <div className="flex items-center gap-2 text-sm text-slate-700">
               <Clock className="h-4 w-4 text-slate-400" />
@@ -247,7 +247,7 @@ export function ShiftDetailPanel({ shift: initialShift, onClose }: ShiftDetailPa
 
         {/* History tab */}
         {tab === 'history' && (
-          <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
             {historyLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-5 w-5 animate-spin text-slate-400" />

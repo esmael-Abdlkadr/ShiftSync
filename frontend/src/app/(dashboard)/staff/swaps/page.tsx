@@ -75,6 +75,12 @@ export default function StaffSwapsPage() {
     queryClient.invalidateQueries({ queryKey: dropKeys.all });
     if (data.status === 'APPROVED') toast.success('Drop request approved!');
   });
+  useSocketEvent('drop:created', () => {
+    queryClient.invalidateQueries({ queryKey: dropKeys.open() });
+  });
+  useSocketEvent('drop:cancelled', () => {
+    queryClient.invalidateQueries({ queryKey: dropKeys.open() });
+  });
 
   const myShifts = (shifts ?? []).filter((s) =>
     s.assignments.some((a) => a.user.id === userId),
@@ -130,7 +136,6 @@ export default function StaffSwapsPage() {
   return (
     <DashboardLayout>
       <div className="h-screen flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="shrink-0 flex items-center gap-3 px-6 py-4 bg-white border-b border-slate-200">
           <div className="h-9 w-9 rounded-lg bg-slate-900 flex items-center justify-center">
             <ArrowLeftRight className="h-4 w-4 text-white" />
@@ -141,7 +146,6 @@ export default function StaffSwapsPage() {
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="shrink-0 flex border-b border-slate-200 bg-white px-6">
           {tabs.map((t) => (
             <button
@@ -166,10 +170,8 @@ export default function StaffSwapsPage() {
           ))}
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
 
-          {/* MY SHIFTS TAB */}
           {tab === 'my-shifts' && (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -261,7 +263,6 @@ export default function StaffSwapsPage() {
             </div>
           )}
 
-          {/* MY REQUESTS TAB */}
           {tab === 'my-requests' && (
             <div className="space-y-6">
               <div>
@@ -273,7 +274,7 @@ export default function StaffSwapsPage() {
                     {(mySwaps ?? []).map((swap) => {
                       const tz = swap.shift.location.timezone;
                       const dateLabel = new Date(swap.shift.startTime).toLocaleDateString('en-US', {
-                        weekday: 'short', month: 'short', day: 'numeric',
+                        weekday: 'short', month: 'short', day: 'numeric', timeZone: tz,
                       });
                       const canCancel = ['PENDING_PARTNER', 'PENDING_APPROVAL'].includes(swap.status);
                       const isInitiator = swap.initiatorId === userId;
@@ -292,11 +293,24 @@ export default function StaffSwapsPage() {
                                 </span>
                               </div>
                               <div className="text-xs text-slate-500">
-                                {dateLabel} · {formatTime(swap.shift.startTime, tz)} – {formatTime(swap.shift.endTime, tz)}
+                                Offered: {dateLabel} · {formatTime(swap.shift.startTime, tz)} – {formatTime(swap.shift.endTime, tz)}
                               </div>
                               <div className="text-xs text-slate-500">
                                 {swap.shift.location.name} · {swap.shift.requiredSkill.name}
                               </div>
+                              {swap.targetShift && (
+                                <div className="text-xs text-slate-500">
+                                  Requested: {new Date(swap.targetShift.startTime).toLocaleDateString('en-US', {
+                                    weekday: 'short',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    timeZone: swap.targetShift.location.timezone,
+                                  })}{' '}
+                                  · {formatTime(swap.targetShift.startTime, swap.targetShift.location.timezone)} –{' '}
+                                  {formatTime(swap.targetShift.endTime, swap.targetShift.location.timezone)} ·{' '}
+                                  {swap.targetShift.location.name} · {swap.targetShift.requiredSkill.name}
+                                </div>
+                              )}
                             </div>
                             <div className="flex flex-col items-end gap-2">
                               <RequestStatusBadge status={swap.status} type="swap" />
@@ -353,10 +367,12 @@ export default function StaffSwapsPage() {
                     {(myDrops ?? []).map((drop) => {
                       const tz = drop.shift.location.timezone;
                       const dateLabel = new Date(drop.shift.startTime).toLocaleDateString('en-US', {
-                        weekday: 'short', month: 'short', day: 'numeric',
+                        weekday: 'short', month: 'short', day: 'numeric', timeZone: tz,
                       });
                       const canCancel = drop.status === 'OPEN';
-                      const expiresAt = new Date(drop.expiresAt).toLocaleString();
+                      const expiresAt = new Date(drop.expiresAt).toLocaleString('en-US', {
+                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz,
+                      });
 
                       return (
                         <div key={drop.id} className="border border-slate-200 rounded-xl p-4 bg-white">
@@ -396,7 +412,6 @@ export default function StaffSwapsPage() {
             </div>
           )}
 
-          {/* AVAILABLE SHIFTS TAB */}
           {tab === 'available' && (
             <div className="space-y-3">
               <p className="text-sm text-slate-500">
@@ -412,7 +427,7 @@ export default function StaffSwapsPage() {
                   {(openDrops ?? []).map((drop) => {
                     const tz = drop.shift.location.timezone;
                     const dateLabel = new Date(drop.shift.startTime).toLocaleDateString('en-US', {
-                      weekday: 'long', month: 'short', day: 'numeric',
+                      weekday: 'long', month: 'short', day: 'numeric', timeZone: tz,
                     });
                     const expiresIn = Math.max(
                       0,
@@ -464,6 +479,7 @@ export default function StaffSwapsPage() {
           isOpen={!!swapShift}
           onClose={() => setSwapShift(null)}
           currentUserId={userId}
+          allShifts={shifts ?? []}
         />
       )}
       {dropShift && (

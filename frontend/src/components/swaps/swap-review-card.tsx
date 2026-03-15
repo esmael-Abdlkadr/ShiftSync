@@ -20,6 +20,14 @@ function formatShiftTime(utcStr: string, tz: string): string {
   });
 }
 
+function formatShiftDate(utcStr: string): string {
+  return new Date(utcStr).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export function SwapReviewCard({ swap }: Props) {
   const [notes, setNotes] = useState('');
   const [showNotes, setShowNotes] = useState(false);
@@ -36,10 +44,6 @@ export function SwapReviewCard({ swap }: Props) {
     }
   };
 
-  const shiftDate = new Date(swap.shift.startTime).toLocaleDateString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric',
-  });
-
   return (
     <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3">
       <div className="flex items-start justify-between gap-2">
@@ -50,7 +54,7 @@ export function SwapReviewCard({ swap }: Props) {
           <div>
             <div className="text-sm font-medium text-slate-900">Shift Swap Request</div>
             <div className="text-xs text-slate-500">
-              {shiftDate} · {formatShiftTime(swap.shift.startTime, tz)} – {formatShiftTime(swap.shift.endTime, tz)}
+              Offered: {formatShiftDate(swap.shift.startTime)} · {formatShiftTime(swap.shift.startTime, tz)} – {formatShiftTime(swap.shift.endTime, tz)}
             </div>
           </div>
         </div>
@@ -71,8 +75,15 @@ export function SwapReviewCard({ swap }: Props) {
         </div>
       </div>
 
-      <div className="text-xs text-slate-500">
-        <span className="font-medium">{swap.shift.location.name}</span> · {swap.shift.requiredSkill.name}
+      <div className="space-y-1 text-xs text-slate-500">
+        <div>
+          <span className="font-medium">Offered shift:</span> {swap.shift.location.name} · {swap.shift.requiredSkill.name}
+        </div>
+        <div>
+          <span className="font-medium">Requested shift:</span> {swap.targetShift.location.name} · {swap.targetShift.requiredSkill.name}
+          {' · '}
+          {formatShiftDate(swap.targetShift.startTime)} · {formatShiftTime(swap.targetShift.startTime, swap.targetShift.location.timezone)} – {formatShiftTime(swap.targetShift.endTime, swap.targetShift.location.timezone)}
+        </div>
       </div>
 
       {swap.status === 'PENDING_APPROVAL' && (

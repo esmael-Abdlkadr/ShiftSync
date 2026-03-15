@@ -209,10 +209,11 @@ model Shift {
 
   location      Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
   requiredSkill Skill             @relation(fields: [skillId], references: [id])
-  assignments   ShiftAssignment[]
-  swapRequests  SwapRequest[]
-  dropRequests  DropRequest[]
-  auditLogs     AuditLog[]
+  assignments         ShiftAssignment[]
+  swapRequestsOffered SwapRequest[]    @relation("SwapOfferedShift")
+  swapRequestsTarget  SwapRequest[]    @relation("SwapTargetShift")
+  dropRequests        DropRequest[]
+  auditLogs           AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -243,11 +244,12 @@ model ShiftAssignment {
 }
 
 model SwapRequest {
-  id          String            @id @default(cuid())
-  shiftId     String
-  initiatorId String
-  targetId    String
-  status      SwapRequestStatus @default(PENDING_PARTNER)
+  id            String            @id @default(cuid())
+  shiftId       String
+  targetShiftId String?
+  initiatorId   String
+  targetId      String
+  status        SwapRequestStatus @default(PENDING_PARTNER)
 
   targetRespondedAt DateTime?
   managerReviewedAt DateTime?
@@ -255,15 +257,17 @@ model SwapRequest {
   managerNotes      String?
   cancelledReason   String?
 
-  shift     Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-  initiator User  @relation("SwapInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
-  target    User  @relation("SwapTarget", fields: [targetId], references: [id], onDelete: Cascade)
-  manager   User? @relation("SwapReviewer", fields: [managerId], references: [id])
+  shift       Shift @relation("SwapOfferedShift", fields: [shiftId], references: [id], onDelete: Cascade)
+  targetShift Shift? @relation("SwapTargetShift", fields: [targetShiftId], references: [id], onDelete: Cascade)
+  initiator   User  @relation("SwapInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  target      User  @relation("SwapTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  manager     User? @relation("SwapReviewer", fields: [managerId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([shiftId])
+  @@index([targetShiftId])
   @@index([initiatorId])
   @@index([targetId])
   @@index([status])

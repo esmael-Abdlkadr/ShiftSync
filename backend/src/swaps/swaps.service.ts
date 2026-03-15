@@ -8,7 +8,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConstraintsService } from '../constraints/constraints.service';
 import { EventsService } from '../events/events.service';
-import { Prisma, SwapRequestStatus, UserRole } from '@prisma/client';
+import {
+  DropRequestStatus,
+  Prisma,
+  SwapRequestStatus,
+  UserRole,
+} from '@prisma/client';
 import type { JwtPayload } from '../auth/types/jwt-payload';
 import type { CreateSwapRequestDto } from './dto/create-swap-request.dto';
 import type { RespondSwapDto } from './dto/respond-swap.dto';
@@ -17,6 +22,12 @@ import type { QuerySwapsDto } from './dto/query-swaps.dto';
 
 const SWAP_INCLUDE = {
   shift: {
+    include: {
+      location: { select: { id: true, name: true, timezone: true } },
+      requiredSkill: { select: { id: true, name: true } },
+    },
+  },
+  targetShift: {
     include: {
       location: { select: { id: true, name: true, timezone: true } },
       requiredSkill: { select: { id: true, name: true } },
@@ -57,10 +68,27 @@ export class SwapsService {
         select: { locationId: true },
       });
       const locationIds = managed.map((m) => m.locationId);
-      where.shift = { locationId: { in: locationIds } };
-      if (query.locationId) where.shift = { locationId: query.locationId };
+      where.AND = [
+        { shift: { locationId: { in: locationIds } } },
+        { targetShift: { locationId: { in: locationIds } } },
+      ];
+      if (query.locationId) {
+        if (!locationIds.includes(query.locationId)) {
+          where.AND.push({ shift: { locationId: { in: [] } } });
+        } else {
+          where.AND.push({
+            OR: [
+              { shift: { locationId: query.locationId } },
+              { targetShift: { locationId: query.locationId } },
+            ],
+          });
+        }
+      }
     } else if (query.locationId) {
-      where.shift = { locationId: query.locationId };
+      where.OR = [
+        { shift: { locationId: query.locationId } },
+        { targetShift: { locationId: query.locationId } },
+      ];
     }
 
     return this.prisma.swapRequest.findMany({
@@ -78,43 +106,63 @@ export class SwapsService {
       throw new BadRequestException('You cannot swap a shift with yourself.');
     }
 
-    const shift = await this.prisma.shift.findUnique({
-      where: { id: dto.shiftId },
-      include: {
-        location: { select: { id: true, name: true, timezone: true } },
-        requiredSkill: { select: { id: true, name: true } },
-        assignments: true,
-      },
-    });
-    if (!shift) throw new NotFoundException('Shift not found.');
-    if (shift.status !== 'PUBLISHED') {
+    if (dto.shiftId === dto.targetShiftId) {
       throw new BadRequestException(
-        'Shift must be published before requesting a swap.',
+        'Swap requires two different shifts (offered and target).',
       );
     }
 
-    const initiatorAssigned = shift.assignments.some(
-      (a) => a.userId === actor.sub,
-    );
-    if (!initiatorAssigned) {
-      throw new BadRequestException('You are not assigned to this shift.');
+    const [shift, targetShift] = await Promise.all([
+      this.prisma.shift.findUnique({
+        where: { id: dto.shiftId },
+        include: {
+          location: { select: { id: true, name: true, timezone: true } },
+          requiredSkill: { select: { id: true, name: true } },
+          assignments: true,
+        },
+      }),
+      this.prisma.shift.findUnique({
+        where: { id: dto.targetShiftId },
+        include: {
+          location: { select: { id: true, name: true, timezone: true } },
+          requiredSkill: { select: { id: true, name: true } },
+          assignments: true,
+        },
+      }),
+    ]);
+
+    if (!shift || !targetShift) throw new NotFoundException('Shift not found.');
+    if (shift.status !== 'PUBLISHED' || targetShift.status !== 'PUBLISHED') {
+      throw new BadRequestException(
+        'Both shifts must be published before requesting a swap.',
+      );
     }
 
-    const targetAssigned = shift.assignments.some(
+    const initiatorAssigned = shift.assignments.some((a) => a.userId === actor.sub);
+    if (!initiatorAssigned) {
+      throw new BadRequestException(
+        'You are not assigned to the offered shift.',
+      );
+    }
+
+    const targetAssigned = targetShift.assignments.some(
       (a) => a.userId === dto.targetUserId,
     );
     if (!targetAssigned) {
       throw new BadRequestException(
-        'The target staff member is not assigned to this shift.',
+        'The target staff member is not assigned to the requested shift.',
       );
     }
 
     await this.assertUnderPendingLimit(actor.sub);
     await this.assertUnderPendingLimit(dto.targetUserId);
+    await this.assertUserCanTakeShift(dto.targetUserId, shift);
+    await this.assertUserCanTakeShift(actor.sub, targetShift);
 
     const existing = await this.prisma.swapRequest.findFirst({
       where: {
         shiftId: dto.shiftId,
+        targetShiftId: dto.targetShiftId,
         initiatorId: actor.sub,
         targetId: dto.targetUserId,
         status: {
@@ -134,6 +182,7 @@ export class SwapsService {
     const swap = await this.prisma.swapRequest.create({
       data: {
         shiftId: dto.shiftId,
+        targetShiftId: dto.targetShiftId,
         initiatorId: actor.sub,
         targetId: dto.targetUserId,
         status: SwapRequestStatus.PENDING_PARTNER,
@@ -145,7 +194,7 @@ export class SwapsService {
       dto.targetUserId,
       'SWAP_REQUEST',
       'Swap Request Received',
-      `${swap.initiator.firstName} ${swap.initiator.lastName} wants to swap the shift on ${shift.date.toISOString().split('T')[0]} with you.`,
+      `${swap.initiator.firstName} ${swap.initiator.lastName} proposes swapping their ${shift.requiredSkill.name} shift on ${shift.date.toISOString().split('T')[0]} for your ${targetShift.requiredSkill.name} shift on ${targetShift.date.toISOString().split('T')[0]}.`,
       { swapId: swap.id, shiftId: shift.id },
     );
     this.events.emitToUser(dto.targetUserId, 'swap:new', { swapId: swap.id });
@@ -155,6 +204,7 @@ export class SwapsService {
 
   async respondToSwap(actor: JwtPayload, swapId: string, dto: RespondSwapDto) {
     const swap = await this.getSwapOrThrow(swapId);
+    this.assertStructuredSwap(swap);
 
     if (swap.targetId !== actor.sub) {
       throw new ForbiddenException(
@@ -190,10 +240,16 @@ export class SwapsService {
       return updated;
     }
 
+    await this.assertAssignedToShift(swap.initiatorId, swap.shiftId);
+    await this.assertAssignedToShift(swap.targetId, swap.targetShiftId);
+    await this.assertUserCanTakeShift(swap.targetId, swap.shift);
+    await this.assertUserCanTakeShift(swap.initiatorId, swap.targetShift);
+
     const managers = await this.prisma.locationManager.findMany({
-      where: { locationId: swap.shift.locationId },
+      where: { locationId: { in: [swap.shift.locationId, swap.targetShift.locationId] } },
       select: { userId: true },
     });
+    const managerIds = Array.from(new Set(managers.map((m) => m.userId)));
 
     const updated = await this.prisma.swapRequest.update({
       where: { id: swapId },
@@ -216,12 +272,12 @@ export class SwapsService {
       status: 'PENDING_APPROVAL',
     });
 
-    for (const mgr of managers) {
+    for (const managerId of managerIds) {
       await this.notifications.notify(
-        mgr.userId,
+        managerId,
         'SWAP_PENDING_APPROVAL',
         'Swap Request Needs Approval',
-        `${swap.initiator.firstName} ${swap.initiator.lastName} and ${swap.target.firstName} ${swap.target.lastName} want to swap shifts on ${swap.shift.date.toISOString().split('T')[0]}. Your approval is required.`,
+        `${swap.initiator.firstName} ${swap.initiator.lastName} and ${swap.target.firstName} ${swap.target.lastName} request a shift exchange (${swap.shift.date.toISOString().split('T')[0]} and ${swap.targetShift.date.toISOString().split('T')[0]}). Your approval is required.`,
         { swapId },
       );
     }
@@ -235,6 +291,7 @@ export class SwapsService {
     dto: ReviewSwapDto,
   ) {
     const swap = await this.getSwapOrThrow(swapId);
+    this.assertStructuredSwap(swap);
 
     if (swap.status !== SwapRequestStatus.PENDING_APPROVAL) {
       throw new BadRequestException(
@@ -243,12 +300,17 @@ export class SwapsService {
     }
 
     if (actor.role === UserRole.MANAGER) {
-      const manages = await this.prisma.locationManager.findFirst({
-        where: { userId: actor.sub, locationId: swap.shift.locationId },
+      const managedLocations = await this.prisma.locationManager.findMany({
+        where: { userId: actor.sub },
+        select: { locationId: true },
       });
-      if (!manages)
+      const managedIds = managedLocations.map((l) => l.locationId);
+      const canReview =
+        managedIds.includes(swap.shift.locationId) &&
+        managedIds.includes(swap.targetShift.locationId);
+      if (!canReview)
         throw new ForbiddenException(
-          "You do not manage this shift's location.",
+          "You must manage both shifts' locations to review this swap.",
         );
     } else if (actor.role !== UserRole.ADMIN) {
       throw new ForbiddenException(
@@ -295,11 +357,18 @@ export class SwapsService {
       return updated;
     }
 
+    await this.assertAssignedToShift(swap.initiatorId, swap.shiftId);
+    await this.assertAssignedToShift(swap.targetId, swap.targetShiftId);
+    await this.assertUserCanTakeShift(swap.targetId, swap.shift);
+    await this.assertUserCanTakeShift(swap.initiatorId, swap.targetShift);
+
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.shiftAssignment.deleteMany({
         where: {
-          shiftId: swap.shiftId,
-          userId: { in: [swap.initiatorId, swap.targetId] },
+          OR: [
+            { shiftId: swap.shiftId, userId: swap.initiatorId },
+            { shiftId: swap.targetShiftId, userId: swap.targetId },
+          ],
         },
       });
 
@@ -311,7 +380,7 @@ export class SwapsService {
             assignedById: actor.sub,
           },
           {
-            shiftId: swap.shiftId,
+            shiftId: swap.targetShiftId,
             userId: swap.initiatorId,
             assignedById: actor.sub,
           },
@@ -343,7 +412,7 @@ export class SwapsService {
       [swap.initiatorId, swap.targetId],
       'SWAP_APPROVED',
       'Swap Request Approved',
-      `Your swap for the shift on ${swap.shift.date.toISOString().split('T')[0]} has been approved by the manager.`,
+      `Your shift exchange (${swap.shift.date.toISOString().split('T')[0]} and ${swap.targetShift.date.toISOString().split('T')[0]}) has been approved by the manager.`,
       { swapId },
     );
     this.events.emitToUser(swap.initiatorId, 'swap:resolved', {
@@ -423,7 +492,7 @@ export class SwapsService {
   async cancelSwapsForShift(shiftId: string, reason: string) {
     const pendingSwaps = await this.prisma.swapRequest.findMany({
       where: {
-        shiftId,
+        OR: [{ shiftId }, { targetShiftId: shiftId }],
         status: {
           in: [
             SwapRequestStatus.PENDING_PARTNER,
@@ -450,6 +519,63 @@ export class SwapsService {
         'Swap Request Cancelled — Shift Modified',
         `Your swap request for the shift on ${swap.shift.date.toISOString().split('T')[0]} was automatically cancelled because the shift was modified by a manager.`,
         { swapId: swap.id, shiftId },
+      );
+    }
+  }
+
+  private async assertUserCanTakeShift(
+    userId: string,
+    shift: {
+      id: string;
+      startTime: Date;
+      endTime: Date;
+      date: Date;
+      skillId: string;
+      locationId: string;
+      location: { timezone: string };
+    },
+  ) {
+    const result = await this.constraints.check({
+      userId,
+      shiftId: shift.id,
+      shiftStart: shift.startTime,
+      shiftEnd: shift.endTime,
+      shiftDate: shift.date,
+      locationId: shift.locationId,
+      locationTimezone: shift.location.timezone,
+      requiredSkillId: shift.skillId,
+    });
+
+    if (!result.ok) {
+      const message =
+        result.violations.find(
+          (v) => v.severity === 'block' || v.severity === 'override_required',
+        )?.message ?? 'Scheduling constraints prevent this swap.';
+      throw new BadRequestException(message);
+    }
+  }
+
+  private async assertAssignedToShift(userId: string, shiftId: string) {
+    const assignment = await this.prisma.shiftAssignment.findFirst({
+      where: { userId, shiftId },
+      select: { id: true },
+    });
+    if (!assignment) {
+      throw new BadRequestException(
+        'Swap cannot proceed because one of the original assignments has changed.',
+      );
+    }
+  }
+
+  private assertStructuredSwap(
+    swap: SwapWithRelations,
+  ): asserts swap is SwapWithRelations & {
+    targetShiftId: string;
+    targetShift: NonNullable<SwapWithRelations['targetShift']>;
+  } {
+    if (!swap.targetShiftId || !swap.targetShift) {
+      throw new BadRequestException(
+        'This swap request uses an old format and cannot be processed. Please cancel and create a new swap request.',
       );
     }
   }
@@ -486,7 +612,7 @@ export class SwapsService {
   }
 
   private async assertUnderPendingLimit(userId: string) {
-    const count = await this.prisma.swapRequest.count({
+    const swapCount = await this.prisma.swapRequest.count({
       where: {
         OR: [{ initiatorId: userId }, { targetId: userId }],
         status: {
@@ -497,7 +623,15 @@ export class SwapsService {
         },
       },
     });
-    if (count >= 3) {
+    const dropCount = await this.prisma.dropRequest.count({
+      where: {
+        requestorId: userId,
+        status: {
+          in: [DropRequestStatus.OPEN, DropRequestStatus.CLAIMED_PENDING],
+        },
+      },
+    });
+    if (swapCount + dropCount >= 3) {
       throw new BadRequestException(
         'A staff member cannot have more than 3 pending swap/drop requests at once.',
       );

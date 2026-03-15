@@ -40,6 +40,7 @@ const MANAGER_NAV: NavItem[] = [
   { label: 'Staff', href: '/manager/staff', icon: Users },
   { label: 'Schedule', href: '/manager/schedule', icon: Calendar },
   { label: 'Requests', href: '/manager/requests', icon: Clock },
+  { label: 'Reports', href: '/manager/reports', icon: BarChart3 },
   { label: 'Notifications', href: '/notifications', icon: Bell },
   { label: 'Settings', href: '/settings', icon: Settings },
 ];

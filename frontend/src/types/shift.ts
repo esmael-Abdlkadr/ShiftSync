@@ -129,6 +129,8 @@ export interface EligibleStaffMember {
   currentWeeklyHours: number;
   projectedWeeklyHours: number;
   overtimeRisk: OvertimeRisk;
+  requiresOverride: boolean;
+  overrideRules: string[];
 }
 
 export interface WeeklyHoursEntry {

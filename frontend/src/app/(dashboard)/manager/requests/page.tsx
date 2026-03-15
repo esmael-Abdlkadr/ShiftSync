@@ -7,7 +7,11 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { SwapReviewCard } from '@/components/swaps/swap-review-card';
 import { DropReviewCard } from '@/components/swaps/drop-review-card';
 import { useSwaps } from '@/hooks/api/use-swaps';
+import { swapKeys } from '@/hooks/api/use-swaps';
 import { useDrops } from '@/hooks/api/use-drops';
+import { dropKeys } from '@/hooks/api/use-drops';
+import { useSocketEvent } from '@/hooks/use-socket';
+import { useQueryClient } from '@tanstack/react-query';
 import type { DropRequest } from '@/types/swap';
 
 type Tab = 'swaps' | 'open-drops' | 'drops';
@@ -33,7 +37,7 @@ function OpenDropCard({ drop }: { drop: DropRequest }) {
             {drop.shift.location.name} · {drop.shift.requiredSkill.name}
           </p>
           <p className="text-xs text-slate-500 mt-0.5">
-            {new Date(drop.shift.startTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            {new Date(drop.shift.startTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz })}
             {' · '}
             {formatTime(drop.shift.startTime, tz)} – {formatTime(drop.shift.endTime, tz)}
           </p>
@@ -44,7 +48,7 @@ function OpenDropCard({ drop }: { drop: DropRequest }) {
         <div className="text-right shrink-0">
           <p className="text-[10px] text-slate-400">Expires</p>
           <p className="text-xs font-medium text-amber-600">
-            {new Date(drop.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            {new Date(drop.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz })}
           </p>
         </div>
       </div>
@@ -55,6 +59,7 @@ function OpenDropCard({ drop }: { drop: DropRequest }) {
 function ManagerRequestsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const rawTab = searchParams.get('tab');
   const tab: Tab = rawTab === 'open-drops' || rawTab === 'drops' || rawTab === 'swaps' ? rawTab : 'swaps';
@@ -64,6 +69,23 @@ function ManagerRequestsContent() {
   const { data: swaps, isLoading: swapsLoading } = useSwaps({ status: 'PENDING_APPROVAL' });
   const { data: openDrops, isLoading: openDropsLoading } = useDrops({ status: 'OPEN' });
   const { data: drops, isLoading: dropsLoading } = useDrops({ status: 'CLAIMED_PENDING' });
+
+  useSocketEvent('swap:resolved', () => {
+    queryClient.invalidateQueries({ queryKey: swapKeys.all });
+  });
+  useSocketEvent('drop:resolved', () => {
+    queryClient.invalidateQueries({ queryKey: dropKeys.all });
+  });
+  useSocketEvent<{ type?: string }>('notification:new', (payload) => {
+    if (
+      payload.type === 'SWAP_PENDING_APPROVAL' ||
+      payload.type === 'DROP_CREATED' ||
+      payload.type === 'DROP_CLAIMED'
+    ) {
+      queryClient.invalidateQueries({ queryKey: swapKeys.all });
+      queryClient.invalidateQueries({ queryKey: dropKeys.all });
+    }
+  });
 
   const pendingSwaps = swaps ?? [];
   const openDropsList = openDrops ?? [];

@@ -39,8 +39,8 @@ export class UsersController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.usersService.findOne(id, user.sub, user.role);
   }
 
   @Patch(':id')
@@ -54,8 +54,8 @@ export class UsersController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
-  softDelete(@Param('id') id: string) {
-    return this.usersService.softDelete(id);
+  softDelete(@Param('id') id: string, @CurrentUser() actor: JwtPayload) {
+    return this.usersService.softDelete(id, actor.sub);
   }
 
   @Get(':id/skills')

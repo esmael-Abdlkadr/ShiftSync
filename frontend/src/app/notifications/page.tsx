@@ -191,18 +191,24 @@ function getNotifMeta(type: string): NotifMeta {
 }
 
 export default function NotificationsPage() {
+  const PAGE_SIZE = 20;
   const queryClient = useQueryClient();
   const router = useRouter();
   const { data: session } = useSession();
   const role = (session?.user as { role?: string })?.role;
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [page, setPage] = useState(1);
 
   const { data: notifications, isLoading } = useQuery<Notification[]>({
-    queryKey: ['notifications', filter],
+    queryKey: ['notifications', filter, page],
     queryFn: () =>
       api
         .get<Notification[]>(
-          `/notifications${filter === 'unread' ? '?unread=true' : ''}`,
+          `/notifications?${new URLSearchParams({
+            ...(filter === 'unread' ? { unread: 'true' } : {}),
+            limit: String(PAGE_SIZE),
+            offset: String((page - 1) * PAGE_SIZE),
+          })}`,
         )
         .then((r) => r.data),
   });
@@ -222,6 +228,7 @@ export default function NotificationsPage() {
   });
 
   const unreadCount = (notifications ?? []).filter((n) => !n.isRead).length;
+  const hasNextPage = (notifications?.length ?? 0) === PAGE_SIZE;
 
   return (
     <DashboardLayout>
@@ -243,7 +250,10 @@ export default function NotificationsPage() {
                 {(['all', 'unread'] as const).map((f) => (
                   <button
                     key={f}
-                    onClick={() => setFilter(f)}
+                    onClick={() => {
+                      setFilter(f);
+                      setPage(1);
+                    }}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                       filter === f
                         ? 'bg-slate-900 text-white shadow-sm'
@@ -341,6 +351,25 @@ export default function NotificationsPage() {
               })}
             </div>
           )}
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-xs text-slate-400">Page {page}</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Prev
+              </button>
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                disabled={!hasNextPage}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </DashboardLayout>
